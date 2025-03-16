@@ -1,0 +1,1057 @@
+// File: components\chat-interface.tsx
+"use client"
+
+import { useState, useEffect, useRef } from "react"
+import { signOut, onAuthStateChanged } from "firebase/auth"
+import { auth, db } from "@/lib/lib_firebase"
+import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore"
+import { useToast } from "@/hooks/use-toast"
+import { useMobile } from "@/hooks/use-mobile"
+import { User, Chat, Message } from "./types/types_chat"
+import { chatService } from "./services/lib_services_chat"
+import { CallProvider, useCall, CallContext } from "./contexts/contexts_CallContext"
+import { CallInterface } from './call/components_call_CallInterface'
+import { IncomingCallDialog } from './call/components_call_IncomingCallDialog'
+import { FilePreview } from "./chat/components_chat_FilePreview"
+import { ChatHeader } from "./chat/components_chat_ChatHeader"
+import { MessageInput } from "./chat/components_chat_MessageInput"
+import { MessageList } from "./chat/components_chat_MessageList"
+import { ChatSidebar } from "./chat/components_chat_ChatSidebar"
+import { WelcomeScreen } from "./chat/components_chat_WelcomeScreen"
+
+
+function ChatContent() {
+  const { toast } = useToast()
+  const isMobile = useMobile()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // State management
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [users, setUsers] = useState<User[]>([])
+  const [chats, setChats] = useState<Chat[]>([])
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
+  const [selectedChatUser, setSelectedChatUser] = useState<User | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [newMessage, setNewMessage] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isUploading, setIsUploading] = useState(false)
+
+  const { callState, startCall, endCall } = useCall()
+
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  // Auth effect
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDoc = await getDoc(doc(db, "users", user.uid))
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User
+          setCurrentUser({
+            ...userData,
+            displayName: userData.displayName || user.displayName || "Unknown User",
+            photoURL: userData.photoURL || user.photoURL || null,
+          })
+
+          await updateDoc(doc(db, "users", user.uid), {
+            lastSeen: serverTimestamp(),
+            status: "online"
+          })
+        } else {
+          handleSignOut()
+        }
+      } else {
+        document.cookie = "user_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+        window.location.reload()
+      }
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  // Load users effect
+  useEffect(() => {
+    if (!currentUser) return
+
+    const q = query(
+      collection(db, "users"),
+      where("uid", "!=", currentUser.uid)
+    )
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const usersData: User[] = []
+      snapshot.forEach((doc) => {
+        usersData.push(doc.data() as User)
+      })
+      setUsers(usersData)
+    })
+
+    return () => unsubscribe()
+  }, [currentUser])
+
+  // Load chats effect
+  useEffect(() => {
+    if (!currentUser) return
+
+    const unsubscribe = chatService.listenToChats(currentUser.uid, setChats)
+    return () => unsubscribe()
+  }, [currentUser])
+
+  // Load messages for selected chat
+  useEffect(() => {
+    if (!selectedChat) {
+      setMessages([])
+      return
+    }
+
+    const unsubscribe = chatService.listenToMessages(
+      selectedChat.id,
+      setMessages,
+      async (messageId) => {
+        if (currentUser) {
+          await updateDoc(doc(db, "chats", selectedChat.id, "messages", messageId), {
+            read: true,
+          })
+        }
+      }
+    )
+
+    return () => unsubscribe()
+  }, [selectedChat, currentUser])
+
+  // Get selected chat user effect
+  useEffect(() => {
+    if (!selectedChat || !currentUser || !users.length) {
+      setSelectedChatUser(null)
+      return
+    }
+
+    const otherUserId = selectedChat.participants.find(
+      (id) => id !== currentUser.uid
+    )
+    if (otherUserId) {
+      const chatUser = users.find((user) => user.uid === otherUserId) || null
+      setSelectedChatUser(chatUser)
+    }
+  }, [selectedChat, currentUser, users])
+
+  // Scroll to bottom effect
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
+
+  const handleSignOut = async () => {
+    try {
+      if (currentUser) {
+        await updateDoc(doc(db, "users", currentUser.uid), {
+          lastSeen: serverTimestamp(),
+          status: "offline"
+        })
+      }
+      await signOut(auth)
+      document.cookie = "user_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      window.location.reload()
+    } catch (error) {
+      toast({
+        title: "Error signing out",
+        description: "Please try again",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const startNewChat = async (userId: string) => {
+    if (!currentUser) return
+
+    try {
+      const chat = await chatService.createOrGetChat(currentUser.uid, userId)
+      setSelectedChat(chat)
+      if (isMobile) {
+        setSidebarOpen(false)
+      }
+    } catch (error) {
+      toast({
+        title: "Error starting chat",
+        description: "Please try again",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedChat || !currentUser) return
+
+    try {
+      await chatService.sendMessage(selectedChat.id, {
+        senderId: currentUser.uid,
+        text: newMessage,
+        timestamp: new Date().toISOString(),
+        read: false,
+      })
+      setNewMessage("")
+    } catch (error) {
+      toast({
+        title: "Error sending message",
+        description: "Please try again",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleFileUpload = async (file: File) => {
+    if (!file || !selectedChat || !currentUser) return
+
+    try {
+      setIsUploading(true)
+      const downloadURL = await chatService.uploadFile(file, selectedChat.id)
+
+      await chatService.sendMessage(selectedChat.id, {
+        senderId: currentUser.uid,
+        text: `Sent ${file.type.split('/')[0]}`,
+        fileUrl: downloadURL,
+        fileType: file.type,
+        fileName: file.name,
+        timestamp: new Date().toISOString(),
+        read: false,
+      })
+
+      toast({
+        title: "File uploaded",
+        description: "File has been sent successfully.",
+      })
+    } catch (error) {
+      console.error("Error uploading file:", error)
+      toast({
+        title: "Upload failed",
+        description: "Could not upload file. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleFileSelect = () => {
+    const fileInput = document.createElement("input")
+    fileInput.type = "file"
+    fileInput.accept = "image/*, video/*, audio/*, .pdf, .doc, .docx, .txt"
+    fileInput.click()
+
+    fileInput.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) {
+        handleFileUpload(file)
+      }
+    }
+  }
+
+  const filteredUsers = users.filter((user) =>
+    user.displayName.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+
+
+  return (
+    <div className="flex h-screen bg-[#1e1d1d] lg:max-w-[1700px] sm:max-w-[320px]"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}>
+
+
+      {/* Sidebar */}
+      <ChatSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        currentUser={currentUser}
+        users={filteredUsers}
+        chats={chats}
+        selectedChat={selectedChat}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSignOut={handleSignOut}
+        onChatSelect={(chat) => {
+          setSelectedChat(chat)
+          setSidebarOpen(false)
+        }}
+        onStartChat={startNewChat}
+      />
+
+      {/* Chat Area */}
+      <div className={`${sidebarOpen ? "hidden" : "flex"} md:flex flex-1 flex-col h-full`}>
+        {selectedChat && selectedChatUser ? (
+          <>
+            <ChatHeader
+              user={selectedChatUser}
+              onOpenSidebar={() => setSidebarOpen(true)}
+              showMenuButton={true}
+              onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)} // Pass "video" or "audio" as needed
+            />
+
+            {/* Messages Area */}
+            <div
+              className="flex-1 overflow-y-auto p-3 lg:max-w-full max-w-[420px] space-y-3 bg-[#0d1121]"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolygon points='0,50 50,0 100,50 50,100' fill='%23ffffff' fill-opacity='0.05'/%3E%3C/svg%3E")`,
+                backgroundSize: "150px",
+              }}
+            >
+              <MessageList
+                messages={messages}
+                currentUser={currentUser}
+                formatTime={(timestamp) => new Date((timestamp as any).seconds * 1000).toLocaleTimeString()}
+              />
+              <div ref={messagesEndRef} />
+            </div>
+
+            <MessageInput
+              message={newMessage}
+              isUploading={isUploading}
+              onMessageChange={setNewMessage}
+              onSendMessage={handleSendMessage}
+              onFileSelect={handleFileSelect}
+            />
+          </>
+        ) : (
+          <WelcomeScreen
+            onOpenSidebar={() => setSidebarOpen(true)}
+          />
+        )}
+      </div>
+
+      {/* Call UI Components */}
+      <CallContext.Consumer>
+        {(callContext) => {
+          if (!callContext) return null
+          const { callState, endCall } = callContext
+
+          if (callState.isIncomingCall && !callState.callAccepted) {
+            const caller = users.find(user => user.uid === callState.callerId)
+            return (
+              <IncomingCallDialog
+                callerName={caller?.displayName || 'Unknown Caller'}
+              />
+            )
+          }
+
+          if (callState.isOutgoingCall || callState.callAccepted) {
+            const otherUser = users.find(
+              user => user.uid === (callState.calleeId || callState.callerId)
+            )
+            return (
+              <CallInterface
+                recipientName={otherUser?.displayName || 'Unknown User'}
+              />
+            )
+          }
+
+          return null
+        }}
+      </CallContext.Consumer>
+    </div>
+  )
+}
+
+export default function ChatInterface() {
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDoc = await getDoc(doc(db, "users", user.uid))
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User
+          setCurrentUser({
+            ...userData,
+            displayName: userData.displayName || user.displayName || "Unknown User",
+            lastSeen: new Date().toISOString(),
+            photoURL: userData.photoURL || user.photoURL || null,
+          })
+        }
+      }
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  if (!currentUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#1e1d1d] animate-fadeIn">
+        <div className="text-center relative">
+          {/* Blurred Background */}
+          <div className="absolute inset-0 bg-[#1e1d1d] blur-lg opacity-50"></div>
+
+          {/* Loading Message */}
+          <h1 className="text-4xl font-semibold text-white mb-4 animate-pulse">
+            Be patient, your conversations are loading...
+          </h1>
+
+          {/* Loading Spinner */}
+          <div className="w-12 h-12 border-4 border-t-transparent border-white rounded-full animate-spin mx-auto"></div>
+
+          {/* Optional Subtext */}
+          <p className="text-gray-400 mt-4">
+            This might take a few moments. Thanks for your patience!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+
+  return (
+    <CallProvider currentUser={currentUser}>
+      <ChatContent />
+    </CallProvider>
+  )
+}
+
+// File: components\chat\components_chat_ChatHeader.tsx
+"use client"
+
+import { User } from "../types/types_chat"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import { Menu, MoreVertical, Phone, Video } from "lucide-react"
+import { useCall } from "../contexts/contexts_CallContext"
+
+// Utility function to format the last seen date
+const formatLastSeen = (lastSeen: any): string => {
+  if (!lastSeen) return "Unknown";
+
+  let date;
+
+  // Handle Firestore Timestamp or string input
+  if (lastSeen.seconds) {
+    date = new Date(lastSeen.seconds * 1000); // Firestore Timestamp
+  } else if (typeof lastSeen === "string") {
+    date = new Date(lastSeen); // String input
+  } else {
+    return "Unknown";
+  }
+
+  if (isNaN(date.getTime())) return "Unknown"; // Invalid date fallback
+
+  const now = new Date(); // Current date and time
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1); // Create a date object for yesterday
+
+  // Format for today
+  if (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  ) {
+    return `today at ${date.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+  }
+
+  // Format for yesterday
+  if (
+    date.getFullYear() === yesterday.getFullYear() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getDate() === yesterday.getDate()
+  ) {
+    return `yesterday at ${date.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+  }
+
+  // Format for any other day
+  return `last seen on ${date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })} at ${date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+};
+
+interface ChatHeaderProps {
+  user: User
+  onOpenSidebar: () => void
+  showMenuButton?: boolean
+}
+
+export const ChatHeader = ({ user, onOpenSidebar, showMenuButton = false }: ChatHeaderProps) => {
+  const { startCall } = useCall()
+
+
+  return (
+    <div className="p-3 bg-[#1e1d1d] border-b border-gray-800 flex items-center justify-between">
+      <div className="flex items-center space-x-3">
+        {showMenuButton && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="md:hidden"
+            onClick={onOpenSidebar}
+          >
+            <Menu className="h-4 w-4 text-gray-400" />
+          </Button>
+        )}
+        <Avatar className="h-8 w-8">
+          <AvatarImage src={user.photoURL || undefined} />
+          <AvatarFallback className="bg-green-500 text-white text-sm">
+            {user.displayName.charAt(0).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-medium text-sm text-white truncate">
+            {user.displayName}
+          </h2>
+          <p className="text-xs text-gray-400">
+            {user.status === "online" ? "online" : ` ${formatLastSeen(user.lastSeen)}`}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => startCall(user.uid, 'audio')}
+          className="text-gray-400 hover:text-white hover:bg-gray-700"
+          title="Start audio call"
+        >
+          <Phone className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => startCall(user.uid, 'video')}
+          className="text-gray-400 hover:text-white hover:bg-gray-700"
+          title="Start video call"
+        >
+          <Video className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="sm">
+          <MoreVertical className="h-4 w-4 text-gray-400" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+
+// File: components\chat\components_chat_ChatSidebar.tsx
+import { Message, User } from "../types/types_chat"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Search, LogOut, X } from "lucide-react"
+import { formatMessageTime, formatTime, getInitials } from "../utils/lib_utils (1)"
+
+// Add Chat interface since it's used but not imported
+interface Chat {
+  id: string
+  participants: string[]
+  lastMessage: {
+    text: string
+    timestamp: string
+  } | null
+  unreadCount: number
+}
+
+// Add UsersList component
+interface UsersListProps {
+  users: User[]
+  onStartChat: (userId: string) => void
+}
+
+
+
+
+const UsersList = ({ users, onStartChat }: UsersListProps) => {
+
+  
+  return (
+    <div className="py-2">
+      <h3 className="px-3 py-1 text-xs font-medium text-gray-400">USERS</h3>
+      {users.length > 0 ? (
+        users.map((user) => (
+          <div
+            key={user.uid}
+            className="px-3 py-2 flex items-center space-x-3 hover:bg-[#2a2a2a] cursor-pointer"
+            onClick={() => onStartChat(user.uid)}
+          >
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={user.photoURL || undefined} />
+              <AvatarFallback className="bg-green-500 text-white">
+                {getInitials(user.displayName)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-sm text-white truncate">
+                {user.displayName}
+              </h4>
+              <p className="text-xs text-gray-400 truncate">{user.status}</p>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p className="px-3 py-2 text-sm text-gray-400">No users found</p>
+      )}
+    </div>
+  )
+}
+
+// Add ChatsList component
+interface ChatsListProps {
+  chats: Chat[]
+  users: User[]
+  currentUser: User | null
+  selectedChat: Chat | null
+  onChatSelect: (chat: Chat) => void
+}
+
+
+
+
+const ChatsList = ({ chats, users, currentUser, selectedChat, onChatSelect }: ChatsListProps) => {
+  return (
+    <div className="space-y-1">
+      {chats.map((chat) => {
+        const otherUserId = chat.participants.find(
+          (id) => id !== currentUser?.uid
+        )
+        const chatUser = users.find((user) => user.uid === otherUserId)
+       
+
+        return (
+          <div
+            key={chat.id}
+            className={`px-3 py-2 flex items-center space-x-3 cursor-pointer
+              ${selectedChat?.id === chat.id ? "bg-[#2a2a2a]" : "hover:bg-[#2a2a2a]"}`}
+            onClick={() => onChatSelect(chat)}
+          >
+            <Avatar className="h-10 w-10 flex-shrink-0">
+              <AvatarImage src={chatUser?.photoURL || undefined} />
+              <AvatarFallback className="bg-green-500 text-white">
+                {chatUser ? getInitials(chatUser.displayName) : "?"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-center">
+                <h4 className="font-medium text-sm text-white truncate">
+                  {chatUser?.displayName || "Unknown User"}
+                </h4>
+                {chat.lastMessage && (
+                  <span className="text-[10px] text-gray-400">
+                    {formatMessageTime(chat.lastMessage.timestamp)}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 truncate">
+                {chat.lastMessage ? chat.lastMessage.text : "No messages yet"}
+              </p>
+            </div>
+          </div>
+        )
+      })}
+
+      {chats.length === 0 && (
+        <div className="px-3 py-6 text-center">
+          <p className="text-sm text-gray-400">No conversations yet</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Search for users to start chatting
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ChatSidebarProps {
+  isOpen: boolean
+  onClose: () => void
+  currentUser: User | null
+  users: User[]
+  chats: Chat[]
+  selectedChat: Chat | null
+  searchQuery: string
+  onSearchChange: (query: string) => void
+  onSignOut: () => void
+  onChatSelect: (chat: Chat) => void
+  onStartChat: (userId: string) => void
+}
+
+export const ChatSidebar = ({
+  isOpen,
+  onClose,
+  currentUser,
+  users,
+  chats,
+  selectedChat,
+  searchQuery,
+  onSearchChange,
+  onSignOut,
+  onChatSelect,
+  onStartChat,
+}: ChatSidebarProps) => {
+  return (
+    <div
+      className={`${isOpen ? "fixed inset-0 z-40 block w-full" : "hidden"
+        } md:relative md:block md:w-[320px] lg:w-[400px] h-full bg-[#1e1d1d] border-r border-gray-800`}
+    >
+      {/* Header */}
+      <div className="p-3 bg-[#1e1d1d] border-b border-gray-800 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={currentUser?.photoURL || undefined} />
+            <AvatarFallback className="bg-green-500 text-white text-sm">
+              {currentUser?.displayName ? getInitials(currentUser.displayName) : "U"}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h2 className="text-sm font-semibold text-white truncate max-w-[150px]">
+              {currentUser?.displayName}
+            </h2>
+          </div>
+        </div>
+        <div className="flex items-center space-x-1">
+          <Button variant="ghost" size="sm" onClick={onSignOut} title="Sign out">
+            <LogOut className="h-4 w-4 text-gray-400" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="md:hidden"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4 text-gray-400" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="p-2 border-b border-gray-800">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search or start new chat"
+            className="pl-8 h-9 text-sm bg-[#2a2a2a] border-gray-700 text-white focus:ring-1 focus:ring-gray-600"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Users/Chats List */}
+      <div className="flex-1 overflow-y-auto">
+        {searchQuery ? (
+          <UsersList users={users} onStartChat={onStartChat} />
+        ) : (
+          <ChatsList
+            chats={chats}
+            users={users}
+            currentUser={currentUser}
+            selectedChat={selectedChat}
+            onChatSelect={onChatSelect}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// File: components\chat\components_chat_FilePreview.tsx
+"use client"
+
+import { Message } from "../types/types_chat"
+import { FileText, Film, FileMusic, ImageIcon } from "lucide-react"
+import dynamic from 'next/dynamic'
+
+// Import Shadcn components
+import { Card, CardContent, CardDescription } from "@/components/ui/card"
+import { AspectRatio } from "@/components/ui/aspect-ratio"
+
+const ReactPlayer = dynamic(() => import('react-player/lazy'), { ssr: false })
+
+interface FilePreviewProps {
+  message: Message
+}
+
+export const FilePreview = ({ message }: FilePreviewProps) => {
+  const { fileUrl, fileType, fileName, text } = message
+
+  if (!fileUrl || !fileType) {
+    return null
+  }
+
+  if (fileType.startsWith('image/')) {
+    return (
+      <Card className="my-2">
+        <AspectRatio ratio={4 / 3}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={fileUrl}
+            alt={fileName || text}
+            className="object-cover w-full h-full"
+          />
+        </AspectRatio>
+        <CardContent>
+          <CardDescription className="text-xs flex items-center">
+            <ImageIcon size={12} className="mr-1" /> {fileName || "Image"}
+          </CardDescription>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (fileType.startsWith('video/')) {
+    return (
+      <Card className="my-2">
+        <AspectRatio ratio={16 / 9}>
+          <ReactPlayer
+            url={fileUrl}
+            controls={true}
+            width="100%"
+            height="100%"
+            className="react-player"
+          />
+        </AspectRatio>
+        <CardContent>
+          <CardDescription className="text-xs flex items-center">
+            <Film size={12} className="mr-1" /> {fileName || "Video"}
+          </CardDescription>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (fileType.startsWith('audio/')) {
+    return (
+      <Card className="my-2">
+        <CardContent>
+          <div className="rounded-lg bg-muted p-2">
+            <audio controls className="w-full">
+              <source src={fileUrl} type={fileType} />
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+          <CardDescription className="text-xs mt-1 flex items-center">
+            <FileMusic size={12} className="mr-1" /> {fileName || "Audio"}
+          </CardDescription>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="my-2">
+      <CardContent>
+        <a
+          href={fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center p-3 rounded-lg bg-muted/20 hover:bg-muted/30 transition-all"
+        >
+          <FileText className="mr-2 h-6 w-6" />
+          <div className="overflow-hidden">
+            <p className="font-medium text-sm truncate">{fileName || text}</p>
+            <p className="text-xs text-muted-foreground">Click to open</p>
+          </div>
+        </a>
+      </CardContent>
+    </Card>
+  )
+}
+
+// File: components\chat\components_chat_MessageInput.tsx
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Smile, Paperclip, Send, Mic } from "lucide-react"
+
+interface MessageInputProps {
+  message: string
+  isUploading: boolean
+  onMessageChange: (message: string) => void
+  onSendMessage: () => void
+  onFileSelect: () => void
+}
+
+export const MessageInput = ({
+  message,
+  isUploading,
+  onMessageChange,
+  onSendMessage,
+  onFileSelect
+}: MessageInputProps) => {
+  return (
+    <div className="p-3 bg-[#1e1d1d] border-t border-gray-800">
+      <div className="flex items-center space-x-2">
+        <Button variant="ghost" size="sm" className="text-gray-400">
+          <Smile className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onFileSelect}
+          disabled={isUploading}
+          className="text-gray-400"
+        >
+          <Paperclip
+            className={`h-5 w-5 ${isUploading ? "text-blue-400 animate-pulse" : ""}`}
+          />
+        </Button>
+        <div className="flex-1">
+          <Input
+            placeholder={isUploading ? "Uploading file..." : "Type a message"}
+            className="w-full text-sm bg-[#2a2a2a] border-gray-700 text-white focus:ring-1 focus:ring-gray-600"
+            value={message}
+            onChange={(e) => onMessageChange(e.target.value)}
+            disabled={isUploading}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                onSendMessage()
+              }
+            }}
+          />
+        </div>
+        {message.trim() ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSendMessage}
+            disabled={isUploading}
+            className="text-gray-400"
+          >
+            <Send className="h-5 w-5" />
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" className="text-gray-400">
+            <Mic className="h-5 w-5" />
+          </Button>
+        )}
+      </div>
+
+      {isUploading && (
+        <div className="mt-2 text-center">
+          <p className="text-xs text-blue-400">Uploading file, please wait...</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// File: components\chat\components_chat_MessageList.tsx
+import { Message, User } from "../types/types_chat"
+import { FilePreview } from "./components_chat_FilePreview"
+import { formatMessageTime } from "../utils/lib_utils (1)"
+
+interface MessageListProps {
+  messages: Message[]
+  currentUser: User | null
+  formatTime: (timestamp: string) => string
+}
+
+export const MessageList = ({ messages, currentUser, formatTime }: MessageListProps) => {
+  if (messages.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center text-gray-400">
+          <p className="text-sm">No messages yet</p>
+          <p className="text-xs mt-1">Send a message to start the conversation</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {messages.map((message) => {
+        const isCurrentUser = message.senderId === currentUser?.uid
+
+        return (
+          <div
+            key={message.id}
+            className={`flex ${isCurrentUser ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-[75%] rounded-lg px-3 py-2 ${isCurrentUser
+                ? "bg-blue-500 text-white"
+                : "bg-[#2a2a2a] text-white"
+                }`}
+            >
+              {message.fileUrl && message.fileType && (
+                <FilePreview message={message} />
+              )}
+
+              {message.text && (
+                <p className="text-sm whitespace-pre-wrap break-words">
+                  {message.text}
+                </p>
+              )}
+
+              <div
+                className={`text-[10px] mt-1 flex items-center justify-end
+                ${isCurrentUser ? "text-blue-100" : "text-gray-400"}`}
+              >
+                {formatMessageTime(message.timestamp)}
+                {isCurrentUser && (
+                  <span className="ml-1">
+                    {message.read ? "✓✓" : "✓"}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+// File: components\chat\components_chat_WelcomeScreen.tsx
+import { Button } from "@/components/ui/button"
+import { Menu, MessageSquare } from "lucide-react"
+
+interface WelcomeScreenProps {
+  onOpenSidebar: () => void
+}
+
+export const WelcomeScreen = ({ onOpenSidebar }: WelcomeScreenProps) => {
+  return (
+    <div className="h-full flex flex-col items-center justify-center p-4">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="md:hidden absolute top-3 left-3"
+        onClick={onOpenSidebar}
+      >
+        <Menu className="h-4 w-4 mr-2 text-gray-400" />
+        <span className="text-sm text-gray-400">Chats</span>
+      </Button>
+      <div className="text-center max-w-md">
+        <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <MessageSquare className="h-8 w-8 text-white" />
+        </div>
+        <h2 className="text-xl font-bold text-white mb-2">Memchat</h2>
+        <p className="text-sm text-gray-400">
+          Select a chat from the sidebar or search for a user to start a new
+          conversation.
+        </p>
+      </div>
+    </div>
+  )
+}

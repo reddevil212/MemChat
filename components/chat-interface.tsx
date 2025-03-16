@@ -1,26 +1,25 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { signOut, onAuthStateChanged } from "firebase/auth"
+import { onAuthStateChanged, signOut } from "firebase/auth"
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, onSnapshot } from "firebase/firestore"
 import { auth, db } from "@/lib/lib_firebase"
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore"
+import { User, Chat, Message } from "./types/types_chat"
+import { CallContext } from "./contexts/contexts_CallContext"
+import { chatService } from "./services/lib_services_chat"
 import { useToast } from "@/hooks/use-toast"
 import { useMobile } from "@/hooks/use-mobile"
-import { User, Chat, Message } from "./types/types_chat"
-import { chatService } from "./services/lib_services_chat"
-import { CallProvider, useCall, CallContext } from "./contexts/contexts_CallContext"
-import { CallInterface } from './call/components_call_CallInterface'
-import { IncomingCallDialog } from './call/components_call_IncomingCallDialog'
-import { FilePreview } from "./chat/components_chat_FilePreview"
+import { CallProvider, useCall } from "./contexts/contexts_CallContext"
+import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card"
+import { ChatSidebar } from "./chat/components_chat_ChatSidebar"
 import { ChatHeader } from "./chat/components_chat_ChatHeader"
 import { MessageInput } from "./chat/components_chat_MessageInput"
 import { MessageList } from "./chat/components_chat_MessageList"
-import { ChatSidebar } from "./chat/components_chat_ChatSidebar"
 import { WelcomeScreen } from "./chat/components_chat_WelcomeScreen"
-
+import { toast } from "sonner"
 
 function ChatContent() {
-  const { toast } = useToast()
+  
   const isMobile = useMobile()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -38,21 +37,20 @@ function ChatContent() {
 
   const { callState, startCall, endCall } = useCall()
 
-
   const handleDragOver = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
+    event.preventDefault()
+    event.stopPropagation()
+  }
 
   const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+    event.preventDefault()
+    event.stopPropagation()
 
-    const file = event.dataTransfer.files[0];
+    const file = event.dataTransfer.files[0]
     if (file) {
-      handleFileUpload(file);
+      handleFileUpload(file)
     }
-  };
+  }
 
   // Auth effect
   useEffect(() => {
@@ -166,10 +164,10 @@ function ChatContent() {
       document.cookie = "user_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
       window.location.reload()
     } catch (error) {
-      toast({
-        title: "Error signing out",
+      toast("Error signing out",{
+       
         description: "Please try again",
-        variant: "destructive",
+        
       })
     }
   }
@@ -184,10 +182,10 @@ function ChatContent() {
         setSidebarOpen(false)
       }
     } catch (error) {
-      toast({
-        title: "Error starting chat",
+      toast("Error starting chat",{
+       
         description: "Please try again",
-        variant: "destructive",
+       
       })
     }
   }
@@ -204,10 +202,10 @@ function ChatContent() {
       })
       setNewMessage("")
     } catch (error) {
-      toast({
-        title: "Error sending message",
+      toast("Error sending message",{
+       
         description: "Please try again",
-        variant: "destructive",
+        
       })
     }
   }
@@ -229,16 +227,16 @@ function ChatContent() {
         read: false,
       })
 
-      toast({
-        title: "File uploaded",
+      toast( "File uploaded",{
+      
         description: "File has been sent successfully.",
       })
     } catch (error) {
       console.error("Error uploading file:", error)
-      toast({
-        title: "Upload failed",
+      toast("Upload failed",{
+       
         description: "Could not upload file. Please try again.",
-        variant: "destructive",
+       
       })
     } finally {
       setIsUploading(false)
@@ -259,17 +257,48 @@ function ChatContent() {
     }
   }
 
+  const handleVoiceMessageSend = async (audioBlob: Blob, duration?: number) => {
+    if (!selectedChat || !currentUser) return
+
+    try {
+      setIsUploading(true)
+      const downloadURL = await chatService.uploadFile(audioBlob, selectedChat.id)
+
+      await chatService.sendMessage(selectedChat.id, {
+        senderId: currentUser.uid,
+        text: "Sent a voice message",
+        fileUrl: downloadURL,
+        fileType: "audio/wav",
+        duration: duration,
+        fileName: "voice_message.wav",
+        timestamp: new Date().toISOString(),
+        read: false,
+      })
+
+      toast("Voice message sent",{
+        
+        description: "Voice message has been sent successfully.",
+      })
+    } catch (error) {
+      console.error("Error sending voice message:", error)
+      toast("Send failed",{
+       
+        description: "Could not send voice message. Please try again.",
+        
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   const filteredUsers = users.filter((user) =>
     user.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-
-
   return (
-    <div className="flex h-screen bg-[#1e1d1d] lg:max-w-[1700px] sm:max-w-[320px]"
+    <Card className="flex h-screen bg-background lg:max-w-[1700px] sm:max-w-[320px] border-0"
       onDragOver={handleDragOver}
       onDrop={handleDrop}>
-
 
       {/* Sidebar */}
       <ChatSidebar
@@ -290,28 +319,22 @@ function ChatContent() {
       />
 
       {/* Chat Area */}
-      <div className={`${sidebarOpen ? "hidden" : "flex"} md:flex flex-1 flex-col h-full`}>
+      <CardContent className={`${sidebarOpen ? "hidden" : "flex"} md:flex flex-1 flex-col h-full p-0`}>
         {selectedChat && selectedChatUser ? (
           <>
             <ChatHeader
               user={selectedChatUser}
               onOpenSidebar={() => setSidebarOpen(true)}
               showMenuButton={true}
-              onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)} // Pass "video" or "audio" as needed
+              onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)}
             />
 
             {/* Messages Area */}
-            <div
-              className="flex-1 overflow-y-auto p-3 lg:max-w-full max-w-[420px] space-y-3 bg-[#0d1121]"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolygon points='0,50 50,0 100,50 50,100' fill='%23ffffff' fill-opacity='0.05'/%3E%3C/svg%3E")`,
-                backgroundSize: "150px",
-              }}
-            >
+            <div className="flex-1 scrolbar-thin overflow-y-auto p-4">
               <MessageList
                 messages={messages}
                 currentUser={currentUser}
-                formatTime={(timestamp) => new Date((timestamp as any).seconds * 1000).toLocaleTimeString()}
+                formatTime={(timestamp) => new Date(timestamp).toLocaleTimeString()}
               />
               <div ref={messagesEndRef} />
             </div>
@@ -322,6 +345,7 @@ function ChatContent() {
               onMessageChange={setNewMessage}
               onSendMessage={handleSendMessage}
               onFileSelect={handleFileSelect}
+              onVoiceMessageSend={handleVoiceMessageSend}
             />
           </>
         ) : (
@@ -329,7 +353,7 @@ function ChatContent() {
             onOpenSidebar={() => setSidebarOpen(true)}
           />
         )}
-      </div>
+      </CardContent>
 
       {/* Call UI Components */}
       <CallContext.Consumer>
@@ -338,29 +362,17 @@ function ChatContent() {
           const { callState, endCall } = callContext
 
           if (callState.isIncomingCall && !callState.callAccepted) {
-            const caller = users.find(user => user.uid === callState.callerId)
-            return (
-              <IncomingCallDialog
-                callerName={caller?.displayName || 'Unknown Caller'}
-              />
-            )
+            // Incoming call UI
           }
 
           if (callState.isOutgoingCall || callState.callAccepted) {
-            const otherUser = users.find(
-              user => user.uid === (callState.calleeId || callState.callerId)
-            )
-            return (
-              <CallInterface
-                recipientName={otherUser?.displayName || 'Unknown User'}
-              />
-            )
+            // Ongoing call UI
           }
 
           return null
         }}
       </CallContext.Consumer>
-    </div>
+    </Card>
   )
 }
 
@@ -388,28 +400,20 @@ export default function ChatInterface() {
 
   if (!currentUser) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1e1d1d] animate-fadeIn">
-        <div className="text-center relative">
-          {/* Blurred Background */}
-          <div className="absolute inset-0 bg-[#1e1d1d] blur-lg opacity-50"></div>
-
-          {/* Loading Message */}
-          <h1 className="text-4xl font-semibold text-white mb-4 animate-pulse">
+      <Card className="flex items-center justify-center min-h-screen bg-muted/30 animate-fadeIn border-0">
+        <CardContent className="text-center relative w-full">
+          <div className="absolute inset-0 bg-background blur-lg opacity-50"></div>
+          <CardTitle className="text-4xl font-semibold text-foreground mb-4 animate-pulse">
             Be patient, your conversations are loading...
-          </h1>
-
-          {/* Loading Spinner */}
-          <div className="w-12 h-12 border-4 border-t-transparent border-white rounded-full animate-spin mx-auto"></div>
-
-          {/* Optional Subtext */}
-          <p className="text-gray-400 mt-4">
+          </CardTitle>
+          <div className="w-12 h-12 border-4 border-t-transparent border-primary rounded-full animate-spin mx-auto"></div>
+          <CardDescription className="mt-4">
             This might take a few moments. Thanks for your patience!
-          </p>
-        </div>
-      </div>
-    );
+          </CardDescription>
+        </CardContent>
+      </Card>
+    )
   }
-
 
   return (
     <CallProvider currentUser={currentUser}>

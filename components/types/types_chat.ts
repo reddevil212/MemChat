@@ -29,6 +29,7 @@ export interface Message {
   fileUrl?: string
   fileType?: string
   fileName?: string
+  duration?: number;
 }
 // ... existing types ...
 

@@ -31,7 +31,7 @@ export const MessageList = ({ messages, currentUser, formatTime }: MessageListPr
             className={`flex ${isCurrentUser ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[75%] rounded-lg px-3 py-2 ${isCurrentUser
+              className={`max-w-[75%] rounded-lg px-3 py-2 mb-3 ${isCurrentUser
                 ? "bg-blue-500 text-white"
                 : "bg-[#2a2a2a] text-white"
                 }`}
