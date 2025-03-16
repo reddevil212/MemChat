@@ -8,7 +8,7 @@ export default async function Home() {
   const isLoggedIn = cookieStore.has("user_session");
 
   return (
-    <main className="h-screen w-screen overflow-hidden bg-gray-100">
+    <main className="h-screen w-screen overflow-hidden bg-black">
       {isLoggedIn ? <ChatInterface /> : <AuthScreen />}
     </main>
   );

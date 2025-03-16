@@ -11,7 +11,7 @@ interface MessageListProps {
 export const MessageList = ({ messages, currentUser, formatTime }: MessageListProps) => {
   if (messages.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex scrollbar items-center justify-center">
         <div className="text-center text-gray-400">
           <p className="text-sm">No messages yet</p>
           <p className="text-xs mt-1">Send a message to start the conversation</p>

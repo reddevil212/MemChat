@@ -2,26 +2,25 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { signOut, onAuthStateChanged } from "firebase/auth"
+import { onAuthStateChanged, signOut } from "firebase/auth"
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, onSnapshot } from "firebase/firestore"
 import { auth, db } from "@/lib/lib_firebase"
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore"
+import { User, Chat, Message } from "./types/types_chat"
+import { CallContext } from "./contexts/contexts_CallContext"
+import { chatService } from "./services/lib_services_chat"
 import { useToast } from "@/hooks/use-toast"
 import { useMobile } from "@/hooks/use-mobile"
-import { User, Chat, Message } from "./types/types_chat"
-import { chatService } from "./services/lib_services_chat"
-import { CallProvider, useCall, CallContext } from "./contexts/contexts_CallContext"
-import { CallInterface } from './call/components_call_CallInterface'
-import { IncomingCallDialog } from './call/components_call_IncomingCallDialog'
-import { FilePreview } from "./chat/components_chat_FilePreview"
+import { CallProvider, useCall } from "./contexts/contexts_CallContext"
+import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card"
+import { ChatSidebar } from "./chat/components_chat_ChatSidebar"
 import { ChatHeader } from "./chat/components_chat_ChatHeader"
 import { MessageInput } from "./chat/components_chat_MessageInput"
 import { MessageList } from "./chat/components_chat_MessageList"
-import { ChatSidebar } from "./chat/components_chat_ChatSidebar"
 import { WelcomeScreen } from "./chat/components_chat_WelcomeScreen"
-
+import { toast } from "sonner"
 
 function ChatContent() {
-  const { toast } = useToast()
+  
   const isMobile = useMobile()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -39,21 +38,20 @@ function ChatContent() {
 
   const { callState, startCall, endCall } = useCall()
 
-
   const handleDragOver = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
+    event.preventDefault()
+    event.stopPropagation()
+  }
 
   const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+    event.preventDefault()
+    event.stopPropagation()
 
-    const file = event.dataTransfer.files[0];
+    const file = event.dataTransfer.files[0]
     if (file) {
-      handleFileUpload(file);
+      handleFileUpload(file)
     }
-  };
+  }
 
   // Auth effect
   useEffect(() => {
@@ -167,10 +165,10 @@ function ChatContent() {
       document.cookie = "user_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
       window.location.reload()
     } catch (error) {
-      toast({
-        title: "Error signing out",
+      toast("Error signing out",{
+       
         description: "Please try again",
-        variant: "destructive",
+        
       })
     }
   }
@@ -185,10 +183,10 @@ function ChatContent() {
         setSidebarOpen(false)
       }
     } catch (error) {
-      toast({
-        title: "Error starting chat",
+      toast("Error starting chat",{
+       
         description: "Please try again",
-        variant: "destructive",
+       
       })
     }
   }
@@ -205,10 +203,10 @@ function ChatContent() {
       })
       setNewMessage("")
     } catch (error) {
-      toast({
-        title: "Error sending message",
+      toast("Error sending message",{
+       
         description: "Please try again",
-        variant: "destructive",
+        
       })
     }
   }
@@ -230,16 +228,16 @@ function ChatContent() {
         read: false,
       })
 
-      toast({
-        title: "File uploaded",
+      toast( "File uploaded",{
+      
         description: "File has been sent successfully.",
       })
     } catch (error) {
       console.error("Error uploading file:", error)
-      toast({
-        title: "Upload failed",
+      toast("Upload failed",{
+       
         description: "Could not upload file. Please try again.",
-        variant: "destructive",
+       
       })
     } finally {
       setIsUploading(false)
@@ -260,17 +258,48 @@ function ChatContent() {
     }
   }
 
+  const handleVoiceMessageSend = async (audioBlob: Blob, duration?: number) => {
+    if (!selectedChat || !currentUser) return
+
+    try {
+      setIsUploading(true)
+      const downloadURL = await chatService.uploadFile(audioBlob, selectedChat.id)
+
+      await chatService.sendMessage(selectedChat.id, {
+        senderId: currentUser.uid,
+        text: "Sent a voice message",
+        fileUrl: downloadURL,
+        fileType: "audio/wav",
+        duration: duration,
+        fileName: "voice_message.wav",
+        timestamp: new Date().toISOString(),
+        read: false,
+      })
+
+      toast("Voice message sent",{
+        
+        description: "Voice message has been sent successfully.",
+      })
+    } catch (error) {
+      console.error("Error sending voice message:", error)
+      toast("Send failed",{
+       
+        description: "Could not send voice message. Please try again.",
+        
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   const filteredUsers = users.filter((user) =>
     user.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-
-
   return (
-    <div className="flex h-screen bg-[#1e1d1d] lg:max-w-[1700px] sm:max-w-[320px]"
+    <Card className="flex h-screen bg-background lg:max-w-[1700px] sm:max-w-[320px] border-[-14px]"
       onDragOver={handleDragOver}
       onDrop={handleDrop}>
-
 
       {/* Sidebar */}
       <ChatSidebar
@@ -291,28 +320,22 @@ function ChatContent() {
       />
 
       {/* Chat Area */}
-      <div className={`${sidebarOpen ? "hidden" : "flex"} md:flex flex-1 flex-col h-full`}>
+      <CardContent className={`${sidebarOpen ? "hidden" : "flex"} md:flex flex-1 flex-col h-full p-0`}>
         {selectedChat && selectedChatUser ? (
           <>
             <ChatHeader
               user={selectedChatUser}
               onOpenSidebar={() => setSidebarOpen(true)}
               showMenuButton={true}
-              onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)} // Pass "video" or "audio" as needed
+              onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)}
             />
 
             {/* Messages Area */}
-            <div
-              className="flex-1 overflow-y-auto p-3 lg:max-w-full max-w-[420px] space-y-3 bg-[#0d1121]"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolygon points='0,50 50,0 100,50 50,100' fill='%23ffffff' fill-opacity='0.05'/%3E%3C/svg%3E")`,
-                backgroundSize: "150px",
-              }}
-            >
+            <div className="flex-1 scrolbar-thin overflow-y-auto p-4">
               <MessageList
                 messages={messages}
                 currentUser={currentUser}
-                formatTime={(timestamp) => new Date((timestamp as any).seconds * 1000).toLocaleTimeString()}
+                formatTime={(timestamp) => new Date(timestamp).toLocaleTimeString()}
               />
               <div ref={messagesEndRef} />
             </div>
@@ -323,6 +346,7 @@ function ChatContent() {
               onMessageChange={setNewMessage}
               onSendMessage={handleSendMessage}
               onFileSelect={handleFileSelect}
+              onVoiceMessageSend={handleVoiceMessageSend}
             />
           </>
         ) : (
@@ -330,7 +354,7 @@ function ChatContent() {
             onOpenSidebar={() => setSidebarOpen(true)}
           />
         )}
-      </div>
+      </CardContent>
 
       {/* Call UI Components */}
       <CallContext.Consumer>
@@ -339,29 +363,17 @@ function ChatContent() {
           const { callState, endCall } = callContext
 
           if (callState.isIncomingCall && !callState.callAccepted) {
-            const caller = users.find(user => user.uid === callState.callerId)
-            return (
-              <IncomingCallDialog
-                callerName={caller?.displayName || 'Unknown Caller'}
-              />
-            )
+            // Incoming call UI
           }
 
           if (callState.isOutgoingCall || callState.callAccepted) {
-            const otherUser = users.find(
-              user => user.uid === (callState.calleeId || callState.callerId)
-            )
-            return (
-              <CallInterface
-                recipientName={otherUser?.displayName || 'Unknown User'}
-              />
-            )
+            // Ongoing call UI
           }
 
           return null
         }}
       </CallContext.Consumer>
-    </div>
+    </Card>
   )
 }
 
@@ -389,28 +401,20 @@ export default function ChatInterface() {
 
   if (!currentUser) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1e1d1d] animate-fadeIn">
-        <div className="text-center relative">
-          {/* Blurred Background */}
-          <div className="absolute inset-0 bg-[#1e1d1d] blur-lg opacity-50"></div>
-
-          {/* Loading Message */}
-          <h1 className="text-4xl font-semibold text-white mb-4 animate-pulse">
+      <Card className="flex items-center justify-center min-h-screen bg-muted/30 animate-fadeIn border-0">
+        <CardContent className="text-center relative w-full">
+          <div className="absolute inset-0 bg-background blur-lg opacity-50"></div>
+          <CardTitle className="text-4xl font-semibold text-foreground mb-4 animate-pulse">
             Be patient, your conversations are loading...
-          </h1>
-
-          {/* Loading Spinner */}
-          <div className="w-12 h-12 border-4 border-t-transparent border-white rounded-full animate-spin mx-auto"></div>
-
-          {/* Optional Subtext */}
-          <p className="text-gray-400 mt-4">
+          </CardTitle>
+          <div className="w-12 h-12 border-4 border-t-transparent border-primary rounded-full animate-spin mx-auto"></div>
+          <CardDescription className="mt-4">
             This might take a few moments. Thanks for your patience!
-          </p>
-        </div>
-      </div>
-    );
+          </CardDescription>
+        </CardContent>
+      </Card>
+    )
   }
-
 
   return (
     <CallProvider currentUser={currentUser}>
@@ -420,21 +424,27 @@ export default function ChatInterface() {
 }
 
 // File: components\chat\components_chat_ChatHeader.tsx
-"use client"
-
+import { useState, useEffect } from "react"
 import { User } from "../types/types_chat"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Menu, MoreVertical, Phone, Video } from "lucide-react"
+import { Globe, MailsIcon, Menu, MoreVertical, Phone, Video } from "lucide-react"
 import { useCall } from "../contexts/contexts_CallContext"
+import { toast } from "sonner"
+import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 // Utility function to format the last seen date
 const formatLastSeen = (lastSeen: any): string => {
   if (!lastSeen) return "Unknown";
 
   let date;
-
-  // Handle Firestore Timestamp or string input
   if (lastSeen.seconds) {
     date = new Date(lastSeen.seconds * 1000); // Firestore Timestamp
   } else if (typeof lastSeen === "string") {
@@ -445,37 +455,34 @@ const formatLastSeen = (lastSeen: any): string => {
 
   if (isNaN(date.getTime())) return "Unknown"; // Invalid date fallback
 
-  const now = new Date(); // Current date and time
+  const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1); // Create a date object for yesterday
+  yesterday.setDate(today.getDate() - 1);
 
-  // Format for today
   if (
     date.getFullYear() === today.getFullYear() &&
     date.getMonth() === today.getMonth() &&
     date.getDate() === today.getDate()
   ) {
-    return `today at ${date.toLocaleTimeString(undefined, {
+    return `Today at ${date.toLocaleTimeString(undefined, {
       hour: '2-digit',
       minute: '2-digit',
     })}`;
   }
 
-  // Format for yesterday
   if (
     date.getFullYear() === yesterday.getFullYear() &&
     date.getMonth() === yesterday.getMonth() &&
     date.getDate() === yesterday.getDate()
   ) {
-    return `yesterday at ${date.toLocaleTimeString(undefined, {
+    return `Yesterday at ${date.toLocaleTimeString(undefined, {
       hour: '2-digit',
       minute: '2-digit',
     })}`;
   }
 
-  // Format for any other day
-  return `last seen on ${date.toLocaleDateString(undefined, {
+  return `Last seen on ${date.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -494,9 +501,35 @@ interface ChatHeaderProps {
 export const ChatHeader = ({ user, onOpenSidebar, showMenuButton = false }: ChatHeaderProps) => {
   const { startCall } = useCall()
 
+  // State to track user data and loading status
+  const [userData, setUserData] = useState(user);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate a delay for skeleton loading (1.5 seconds)
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Mock live data update for demonstration
+  useEffect(() => {
+    // Example of subscribing to a real-time change (like Firestore listener)
+    const interval = setInterval(() => {
+      // Simulate a data change
+      setUserData((prevUserData) => ({
+        ...prevUserData,
+        lastSeen: new Date().toISOString(), // Update with new "lastSeen" time
+      }));
+    }, 5000); // Change every 5 seconds
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, []);
 
   return (
-    <div className="p-3 bg-[#1e1d1d] border-b border-gray-800 flex items-center justify-between">
+    <div className="p-3 bg-[#000000] border-b border-gray-800 flex items-center justify-between">
       <div className="flex items-center space-x-3">
         {showMenuButton && (
           <Button
@@ -508,44 +541,102 @@ export const ChatHeader = ({ user, onOpenSidebar, showMenuButton = false }: Chat
             <Menu className="h-4 w-4 text-gray-400" />
           </Button>
         )}
-        <Avatar className="h-8 w-8">
-          <AvatarImage src={user.photoURL || undefined} />
-          <AvatarFallback className="bg-green-500 text-white text-sm">
-            {user.displayName.charAt(0).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+
+        <HoverCard>
+          <HoverCardTrigger>
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={userData.photoURL || undefined} />
+              <AvatarFallback className="bg-green-500 text-white text-sm">
+                {userData.displayName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </HoverCardTrigger>
+          <HoverCardContent className="w-80 p-4 dark:bg-black dark:text-white bg-white text-black rounded-lg shadow-lg">
+            {loading ? (
+              <div className="flex space-x-4">
+                <Skeleton className="h-14 w-14 rounded-full" />
+                <div className="space-y-2 w-full">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              </div>
+            ) : (
+              <div className="flex space-x-4">
+                <Avatar className="h-14 w-14">
+                  <AvatarImage src={userData.photoURL || undefined} />
+                  <AvatarFallback>{userData.displayName.charAt(0).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold">{userData.displayName}</h4>
+                  <div className="flex items-center pt-2">
+                    <MailsIcon className="mr-2 h-4 w-4 opacity-70" />
+                    <span className="text-sm text-gray-500">{userData.email}</span>
+                  </div>
+                  <div className="flex items-center pt-2">
+                    <Globe className="mr-2 h-4 w-4 opacity-70" />
+                    <span className="text-xs text-gray-400">{formatLastSeen(userData.lastSeen)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </HoverCardContent>
+        </HoverCard>
+
         <div className="flex-1 min-w-0">
           <h2 className="font-medium text-sm text-white truncate">
-            {user.displayName}
+            {userData.displayName}
           </h2>
           <p className="text-xs text-gray-400">
-            {user.status === "online" ? "online" : ` ${formatLastSeen(user.lastSeen)}`}
+            {userData.status === "online" ? "online" : `${formatLastSeen(userData.lastSeen)}`}
           </p>
         </div>
       </div>
 
       <div className="flex items-center space-x-2">
-        <Button
+        <TooltipProvider >
+          <Tooltip >
+            <TooltipTrigger > <Button
           variant="ghost"
           size="sm"
-          onClick={() => startCall(user.uid, 'audio')}
+          onClick={() => startCall(userData.uid, 'audio')}
           className="text-gray-400 hover:text-white hover:bg-gray-700"
-          title="Start audio call"
         >
           <Phone className="h-4 w-4" />
         </Button>
+        </TooltipTrigger>
+            <TooltipContent ><p className="dark:bg-black text-white">Start audio call</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+
+        <TooltipProvider >
+          <Tooltip >
+            <TooltipTrigger>
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => startCall(user.uid, 'video')}
+          onClick={() => startCall(userData.uid, 'video')}
           className="text-gray-400 hover:text-white hover:bg-gray-700"
-          title="Start video call"
         >
           <Video className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="sm">
+            </TooltipTrigger>
+            <TooltipContent ><p className="dark:bg-black text-white">Start video call</p></TooltipContent>
+            </Tooltip >
+              </TooltipProvider >
+
+
+
+        <TooltipProvider >
+          <Tooltip >
+            <TooltipTrigger>
+        <Button variant="ghost" size="sm" onClick={() => toast("Coming soon!")} className="text-gray-400 hover:text-white hover:bg-gray-700" >
           <MoreVertical className="h-4 w-4 text-gray-400" />
         </Button>
+      </TooltipTrigger>
+      <TooltipContent ><p className="dark:bg-black text-white">More</p></TooltipContent>
+    </Tooltip >
+              </TooltipProvider >
       </div>
     </div>
   )
@@ -776,15 +867,26 @@ export const ChatSidebar = ({
 // File: components\chat\components_chat_FilePreview.tsx
 "use client"
 
+import { useState, useEffect, useRef } from "react"
 import { Message } from "../types/types_chat"
 import { FileText, Film, FileMusic, ImageIcon } from "lucide-react"
 import dynamic from 'next/dynamic'
+import { AudioPlayer } from "./AudioPlayer"
 
 // Import Shadcn components
-import { Card, CardContent, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter } from "@/components/ui/card"
 import { AspectRatio } from "@/components/ui/aspect-ratio"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 
-const ReactPlayer = dynamic(() => import('react-player/lazy'), { ssr: false })
+const ReactPlayer = dynamic(() => import('react-player/lazy'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[180px] bg-muted/30 animate-pulse rounded-md flex items-center justify-center">
+      <Film className="h-8 w-8 text-muted-foreground/50" />
+    </div>
+  )
+})
 
 interface FilePreviewProps {
   message: Message
@@ -792,6 +894,30 @@ interface FilePreviewProps {
 
 export const FilePreview = ({ message }: FilePreviewProps) => {
   const { fileUrl, fileType, fileName, text } = message
+  const [audioDuration, setAudioDuration] = useState<number | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Load audio duration if this is an audio file and duration isn't already provided
+  useEffect(() => {
+    if (fileType?.startsWith('audio/') && !message.duration && fileUrl) {
+      // Create a temporary audio element to get the duration
+      const audio = new Audio(fileUrl)
+      audioRef.current = audio
+
+      // The loadedmetadata event fires when duration is available
+      const handleLoadedMetadata = () => {
+        setAudioDuration(audio.duration)
+      }
+
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata)
+
+      // Clean up
+      return () => {
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
+        audio.src = '' // Clear source
+      }
+    }
+  }, [fileUrl, fileType, message.duration])
 
   if (!fileUrl || !fileType) {
     return null
@@ -799,87 +925,173 @@ export const FilePreview = ({ message }: FilePreviewProps) => {
 
   if (fileType.startsWith('image/')) {
     return (
-      <Card className="my-2">
-        <AspectRatio ratio={4 / 3}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={fileUrl}
-            alt={fileName || text}
-            className="object-cover w-full h-full"
-          />
-        </AspectRatio>
-        <CardContent>
+      <Card className="my-2 overflow-hidden">
+        <CardContent className="p-0">
+          <AspectRatio ratio={4 / 3}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={fileUrl}
+              alt={fileName || text}
+              className="object-cover w-full h-full rounded-t-md"
+            />
+          </AspectRatio>
+        </CardContent>
+        <CardFooter className="p-2 flex items-center justify-between bg-muted/20">
           <CardDescription className="text-xs flex items-center">
             <ImageIcon size={12} className="mr-1" /> {fileName || "Image"}
           </CardDescription>
-        </CardContent>
+          <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+              Open
+            </a>
+          </Button>
+        </CardFooter>
       </Card>
     )
   }
 
   if (fileType.startsWith('video/')) {
     return (
-      <Card className="my-2">
-        <AspectRatio ratio={16 / 9}>
-          <ReactPlayer
-            url={fileUrl}
-            controls={true}
-            width="100%"
-            height="100%"
-            className="react-player"
-          />
-        </AspectRatio>
-        <CardContent>
+      <Card className="my-2 overflow-hidden">
+        <CardContent className="p-0">
+          <AspectRatio ratio={16 / 9}>
+            <ReactPlayer
+              url={fileUrl}
+              controls={true}
+              width="100%"
+              height="100%"
+              className="react-player"
+            />
+          </AspectRatio>
+        </CardContent>
+        <CardFooter className="p-2 flex items-center justify-between bg-muted/20">
           <CardDescription className="text-xs flex items-center">
             <Film size={12} className="mr-1" /> {fileName || "Video"}
           </CardDescription>
-        </CardContent>
+          <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+              Download
+            </a>
+          </Button>
+        </CardFooter>
       </Card>
     )
   }
 
   if (fileType.startsWith('audio/')) {
+    // Show loading state while getting audio duration
+    if (!message.duration && !audioDuration) {
+      return (
+        <Card className="my-2">
+          <CardContent className="p-4">
+            <div className="rounded-lg bg-muted/20 p-2">
+              <div className="flex items-center justify-center py-4">
+                <Skeleton className="h-8 w-48" />
+              </div>
+            </div>
+            <CardFooter className="px-0 pt-2 pb-0 flex items-center justify-between">
+              <CardDescription className="text-xs flex items-center">
+                <FileMusic size={12} className="mr-1" /> {fileName || "Audio"}
+              </CardDescription>
+              <Skeleton className="h-6 w-16" />
+            </CardFooter>
+          </CardContent>
+        </Card>
+      )
+    }
+
     return (
       <Card className="my-2">
-        <CardContent>
-          <div className="rounded-lg bg-muted p-2">
-            <audio controls className="w-full">
-              <source src={fileUrl} type={fileType} />
-              Your browser does not support the audio element.
-            </audio>
+        <CardContent className="p-4 ">
+          <div className="rounded-lg bg-muted/20 p-2">
+            {/* Use our custom AudioPlayer with the duration we got */}
+            <AudioPlayer
+              src={fileUrl}
+              initialDuration={message.duration || audioDuration || 0}
+              className="w-full"
+            />
           </div>
-          <CardDescription className="text-xs mt-1 flex items-center">
-            <FileMusic size={12} className="mr-1" /> {fileName || "Audio"}
-          </CardDescription>
+          <CardFooter className="px-0 pt-2 pb-0 flex items-center justify-between">
+            <CardDescription className="text-xs flex items-center">
+              <FileMusic size={12} className="mr-1" /> {fileName || "Audio"}
+            </CardDescription>
+            <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
+              <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                Download
+              </a>
+            </Button>
+          </CardFooter>
         </CardContent>
       </Card>
     )
   }
 
+  // For document or other file types
   return (
     <Card className="my-2">
-      <CardContent>
-        <a
-          href={fileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center p-3 rounded-lg bg-muted/20 hover:bg-muted/30 transition-all"
-        >
-          <FileText className="mr-2 h-6 w-6" />
-          <div className="overflow-hidden">
-            <p className="font-medium text-sm truncate">{fileName || text}</p>
-            <p className="text-xs text-muted-foreground">Click to open</p>
-          </div>
-        </a>
+      <CardContent className="p-4">
+        <Button variant="outline" className="w-full justify-start" asChild>
+          <a
+            href={fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center p-3 rounded-lg"
+          >
+            <FileText className="mr-2 h-6 w-6 text-primary" />
+            <div className="overflow-hidden flex-1">
+              <p className="font-medium text-sm truncate">{fileName || text}</p>
+              <p className="text-xs text-muted-foreground">Click to open</p>
+            </div>
+          </a>
+        </Button>
       </CardContent>
     </Card>
   )
 }
 
 // File: components\chat\components_chat_MessageInput.tsx
+"use client"
+
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Smile, Paperclip, Send, Mic } from "lucide-react"
+import { Smile, Paperclip, Send, Mic, StopCircle, Trash2 } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from "@/components/ui/tooltip"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from "@/components/ui/popover"
+import { Progress } from "@/components/ui/progress"
+import { AudioPlayer } from "./AudioPlayer"
+import { toast } from "sonner" // Import toast from your UI library
+
+// You could use a proper emoji picker library here
+// For simplicity, I'm adding a basic placeholder
+const EmojiPicker = ({ onEmojiSelect }: { onEmojiSelect: (emoji: string) => void }) => {
+  const commonEmojis = ["😊", "😂", "❤️", "👍", "🙌", "🎉", "🔥", "👏", "🤔", "😍"]
+
+  return (
+    <div className="grid grid-cols-5 gap-2 p-2">
+      {commonEmojis.map((emoji) => (
+        <Button
+          key={emoji}
+          variant="ghost"
+          className="h-8 w-8 p-0"
+          onClick={() => onEmojiSelect(emoji)}
+        >
+          {emoji}
+        </Button>
+      ))}
+    </div>
+  )
+}
 
 interface MessageInputProps {
   message: string
@@ -887,6 +1099,7 @@ interface MessageInputProps {
   onMessageChange: (message: string) => void
   onSendMessage: () => void
   onFileSelect: () => void
+  onVoiceMessageSend: (audioBlob: Blob) => void
 }
 
 export const MessageInput = ({
@@ -894,63 +1107,228 @@ export const MessageInput = ({
   isUploading,
   onMessageChange,
   onSendMessage,
-  onFileSelect
+  onFileSelect,
+  onVoiceMessageSend
 }: MessageInputProps) => {
-  return (
-    <div className="p-3 bg-[#1e1d1d] border-t border-gray-800">
-      <div className="flex items-center space-x-2">
-        <Button variant="ghost" size="sm" className="text-gray-400">
-          <Smile className="h-5 w-5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onFileSelect}
-          disabled={isUploading}
-          className="text-gray-400"
-        >
-          <Paperclip
-            className={`h-5 w-5 ${isUploading ? "text-blue-400 animate-pulse" : ""}`}
-          />
-        </Button>
-        <div className="flex-1">
-          <Input
-            placeholder={isUploading ? "Uploading file..." : "Type a message"}
-            className="w-full text-sm bg-[#2a2a2a] border-gray-700 text-white focus:ring-1 focus:ring-gray-600"
-            value={message}
-            onChange={(e) => onMessageChange(e.target.value)}
-            disabled={isUploading}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                onSendMessage()
-              }
-            }}
-          />
-        </div>
-        {message.trim() ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onSendMessage}
-            disabled={isUploading}
-            className="text-gray-400"
-          >
-            <Send className="h-5 w-5" />
-          </Button>
-        ) : (
-          <Button variant="ghost" size="sm" className="text-gray-400">
-            <Mic className="h-5 w-5" />
-          </Button>
-        )}
-      </div>
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isRecording, setIsRecording] = useState(false)
+  const [audioURL, setAudioURL] = useState<string | null>(null)
+  const [audioDuration, setAudioDuration] = useState<number>(0)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const recordingStartTimeRef = useRef<number | null>(null)
 
-      {isUploading && (
-        <div className="mt-2 text-center">
-          <p className="text-xs text-blue-400">Uploading file, please wait...</p>
+  // Simulate upload progress
+  if (isUploading && uploadProgress < 100) {
+    setTimeout(() => {
+      setUploadProgress((prev) => Math.min(prev + 10, 100))
+    }, 300)
+  } else if (!isUploading && uploadProgress !== 0) {
+    setUploadProgress(0)
+  }
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data)
+      }
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
+        const audioURL = URL.createObjectURL(audioBlob)
+        setAudioURL(audioURL)
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+      recordingStartTimeRef.current = Date.now()
+    } catch (error) {
+      console.error("Error accessing microphone:", error)
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop()
+    }
+
+    // Stop all audio tracks to release the microphone
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => {
+        track.stop()
+      })
+      mediaStreamRef.current = null
+    }
+
+    // Calculate recording duration
+    if (recordingStartTimeRef.current) {
+      const endTime = Date.now()
+      const duration = (endTime - recordingStartTimeRef.current) / 1000 // duration in seconds
+      setAudioDuration(duration)
+      toast(`Audio duration: ${duration} seconds`)
+      recordingStartTimeRef.current = null
+    }
+
+    setIsRecording(false)
+  }
+
+  const sendVoiceMessage = () => {
+    if (audioURL && audioChunksRef.current.length > 0) {
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
+      onVoiceMessageSend(audioBlob, audioDuration)
+
+      // Clear audio state after sending
+      setAudioURL(null)
+      audioChunksRef.current = []
+      setAudioDuration(0)
+    }
+  }
+
+  const discardRecording = () => {
+    setAudioURL(null)
+    audioChunksRef.current = []
+    setAudioDuration(0)
+
+    // Also ensure any active stream is stopped when discarding
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => {
+        track.stop()
+      })
+      mediaStreamRef.current = null
+    }
+  }
+
+  return (
+    <Card className="rounded-none border-x-0 border-b-0 shadow-none">
+      <CardContent className="p-3">
+        {/* Audio Preview */}
+        {audioURL && (
+          <div className="mb-3 p-2 bg-muted/30 rounded-md">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-medium text-muted-foreground mb-1">
+                Voice Message Preview
+              </div>
+              <div className="flex space-x-1">
+                <Button variant="ghost" size="sm" onClick={sendVoiceMessage} className="h-7 px-2">
+                  <Send className="h-3.5 w-3.5 text-primary mr-1" />
+                  <span className="text-xs">Send</span>
+                </Button>
+                <Button variant="ghost" size="sm" onClick={discardRecording} className="h-7 px-2">
+                  <Trash2 className="h-3.5 w-3.5 text-destructive mr-1" />
+                  <span className="text-xs">Discard</span>
+                </Button>
+              </div>
+            </div>
+            <AudioPlayer src={audioURL} initialDuration={audioDuration} />
+          </div>
+        )}
+
+        <div className="flex items-center space-x-2">
+          <TooltipProvider>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground">
+                      <Smile className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p className="dark: bg-black dark:text-white">Add emoji</p></TooltipContent>
+                </Tooltip>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-0">
+                <EmojiPicker onEmojiSelect={(emoji) => onMessageChange(message + emoji)} />
+              </PopoverContent>
+            </Popover>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onFileSelect}
+                  disabled={isUploading}
+                  className={`text-muted-foreground ${isUploading ? "opacity-50" : ""}`}
+                >
+                  <Paperclip
+                    className={`h-5 w-5 ${isUploading ? "text-primary animate-pulse" : ""}`}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p className="dark: bg-black dark:text-white">Attach file</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <div className="flex-1">
+            <Textarea
+              placeholder={isUploading ? "Uploading file..." : "Type a message"}
+              className="w-full resize-none min-h-[40px] max-h-[120px] text-sm bg-muted/50"
+              value={message}
+              onChange={(e) => onMessageChange(e.target.value)}
+              disabled={isUploading}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault()
+                  onSendMessage()
+                }
+              }}
+              rows={1}
+            />
+          </div>
+
+          <TooltipProvider>
+            {message.trim() ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onSendMessage}
+                    disabled={isUploading}
+                    className="text-primary hover:text-primary hover:bg-primary/10"
+                  >
+                    <Send className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p className="dark: bg-black dark:text-white">Send message</p></TooltipContent>
+              </Tooltip>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={isRecording ? stopRecording : startRecording}
+                    className={`text-muted-foreground ${isRecording ? "text-red-500 animate-pulse" : ""}`}
+                  >
+                    {isRecording ? <StopCircle className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  </Button>
+                </TooltipTrigger>
+                  <TooltipContent><p className="dark: bg-black dark:text-white">{isRecording ? "Stop recording" : "Record voice message"}</p></TooltipContent>
+              </Tooltip>
+            )}
+          </TooltipProvider>
         </div>
-      )}
-    </div>
+
+        {isUploading && (
+          <div className="mt-2">
+            <Progress value={uploadProgress} className="h-1" />
+            <p className="text-xs text-primary mt-1 text-center">
+              Uploading file... {uploadProgress}%
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -988,7 +1366,7 @@ export const MessageList = ({ messages, currentUser, formatTime }: MessageListPr
             className={`flex ${isCurrentUser ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[75%] rounded-lg px-3 py-2 ${isCurrentUser
+              className={`max-w-[75%] rounded-lg px-3 py-2 mb-3 ${isCurrentUser
                 ? "bg-blue-500 text-white"
                 : "bg-[#2a2a2a] text-white"
                 }`}
@@ -1054,4 +1432,160 @@ export const WelcomeScreen = ({ onOpenSidebar }: WelcomeScreenProps) => {
       </div>
     </div>
   )
+}
+
+// File: components\chat\AudioPlayer.tsx
+"use client"
+
+import { useState, useEffect, useRef } from "react"
+import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
+import { Play, Pause, Volume2, VolumeX } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+interface AudioPlayerProps {
+    src: string
+    className?: string
+    initialDuration?: number
+}
+
+export function AudioPlayer({ src, className, initialDuration }: AudioPlayerProps) {
+    const [isPlaying, setIsPlaying] = useState(false)
+    const [currentTime, setCurrentTime] = useState(0)
+    const [duration, setDuration] = useState(initialDuration || 0)
+    const [volume, setVolume] = useState(1)
+    const [isMuted, setIsMuted] = useState(false)
+    const audioRef = useRef<HTMLAudioElement | null>(null)
+
+    useEffect(() => {
+        const audio = audioRef.current
+        if (!audio) return
+
+        const setAudioData = () => {
+            // Only update duration from metadata if we don't have initialDuration
+            if (!initialDuration) {
+                setDuration(audio.duration)
+            }
+        }
+
+        const setAudioTime = () => {
+            setCurrentTime(audio.currentTime)
+        }
+
+        const handleEnded = () => {
+            setIsPlaying(false)
+            audio.currentTime = 0
+            setCurrentTime(0)
+        }
+
+        // Events
+        audio.addEventListener('loadeddata', setAudioData)
+        audio.addEventListener('timeupdate', setAudioTime)
+        audio.addEventListener('ended', handleEnded)
+
+        return () => {
+            audio.removeEventListener('loadeddata', setAudioData)
+            audio.removeEventListener('timeupdate', setAudioTime)
+            audio.removeEventListener('ended', handleEnded)
+        }
+    }, [initialDuration])
+
+    // Update duration when initialDuration changes
+    useEffect(() => {
+        if (initialDuration) {
+            setDuration(initialDuration)
+        }
+    }, [initialDuration])
+
+    // Play/Pause
+    const togglePlay = () => {
+        const audio = audioRef.current
+        if (!audio) return
+
+        if (isPlaying) {
+            audio.pause()
+            setIsPlaying(false)
+        } else {
+            audio.play()
+            setIsPlaying(true)
+        }
+    }
+
+    // Update current time
+    const handleTimeChange = (values: number[]) => {
+        const audio = audioRef.current
+        if (!audio) return
+
+        audio.currentTime = values[0]
+        setCurrentTime(values[0])
+    }
+
+    // Toggle mute
+    const toggleMute = () => {
+        const audio = audioRef.current
+        if (!audio) return
+
+        if (isMuted) {
+            audio.volume = volume
+            setIsMuted(false)
+        } else {
+            audio.volume = 0
+            setIsMuted(true)
+        }
+    }
+
+    // Format time (mm:ss)
+    const formatTime = (time: number) => {
+        if (isNaN(time)) return "00:00"
+
+        const minutes = Math.floor(time / 60)
+        const seconds = Math.floor(time % 60)
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    }
+
+    return (
+        <div className={cn("flex flex-col space-y-2", className)}>
+            <audio ref={audioRef} src={src} preload="metadata" />
+
+            <div className="flex items-center space-x-2">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 rounded-full p-0"
+                    onClick={togglePlay}
+                >
+                    {isPlaying ? (
+                        <Pause className="h-4 w-4" />
+                    ) : (
+                        <Play className="h-4 w-4" />
+                    )}
+                </Button>
+
+                <Slider
+                    value={[currentTime]}
+                    max={duration || 100}
+                    step={0.1}
+                    onValueChange={handleTimeChange}
+                    className="w-full"
+                />
+
+                <div className="text-xs text-muted-foreground w-16 text-right">
+                    {formatTime(currentTime)}/{formatTime(duration)}
+                </div>
+
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 rounded-full p-0"
+                    onClick={toggleMute}
+                >
+                    {isMuted ? (
+                        <VolumeX className="h-4 w-4" />
+                    ) : (
+                        <Volume2 className="h-4 w-4" />
+                    )}
+                </Button>
+            </div>
+        </div>
+    )
 }

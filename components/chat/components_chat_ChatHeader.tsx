@@ -13,6 +13,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { db } from "@/lib/lib_firebase"
+import { doc, onSnapshot } from "firebase/firestore"; // Firebase Firestore methods
 
 // Utility function to format the last seen date
 const formatLastSeen = (lastSeen: any): string => {
@@ -20,14 +22,14 @@ const formatLastSeen = (lastSeen: any): string => {
 
   let date;
   if (lastSeen.seconds) {
-    date = new Date(lastSeen.seconds * 1000); // Firestore Timestamp
+    date = new Date(lastSeen.seconds * 1000);
   } else if (typeof lastSeen === "string") {
-    date = new Date(lastSeen); // String input
+    date = new Date(lastSeen);
   } else {
     return "Unknown";
   }
 
-  if (isNaN(date.getTime())) return "Unknown"; // Invalid date fallback
+  if (isNaN(date.getTime())) return "Unknown";
 
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -70,37 +72,66 @@ interface ChatHeaderProps {
   user: User
   onOpenSidebar: () => void
   showMenuButton?: boolean
+  onCall?: (callType: 'audio' | 'video') => void
 }
 
-export const ChatHeader = ({ user, onOpenSidebar, showMenuButton = false }: ChatHeaderProps) => {
-  const { startCall } = useCall()
+export const ChatHeader = ({
+  user,
+  onOpenSidebar,
+  showMenuButton = false,
+  onCall
+}: ChatHeaderProps) => {
+  const { startCall } = useCall();
 
   // State to track user data and loading status
   const [userData, setUserData] = useState(user);
   const [loading, setLoading] = useState(true);
+  const [isCallEnabled, setIsCallEnabled] = useState(false);
 
   useEffect(() => {
-    // Simulate a delay for skeleton loading (1.5 seconds)
+    // Create a real-time listener to update the user data when it changes
+    const userRef = doc(db, "users", user.uid); // Your Firestore path
+    const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const updatedUserData = docSnapshot.data();
+        setUserData(updatedUserData);
+        setLoading(false);  // Stop loading once data is fetched
+      }
+    });
+
+    // Cleanup listener on component unmount
+    return () => unsubscribe();
+  }, [user.uid]);
+
+  // Check if calling functionality is available
+  useEffect(() => {
     const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1500);
+      setIsCallEnabled(true);
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, []);
 
-  // Mock live data update for demonstration
-  useEffect(() => {
-    // Example of subscribing to a real-time change (like Firestore listener)
-    const interval = setInterval(() => {
-      // Simulate a data change
-      setUserData((prevUserData) => ({
-        ...prevUserData,
-        lastSeen: new Date().toISOString(), // Update with new "lastSeen" time
-      }));
-    }, 5000); // Change every 5 seconds
+  // Handle call function with error handling
+  const handleCall = (callType: 'audio' | 'video') => {
+    if (!isCallEnabled) {
+      toast.error("Call system is still initializing. Please try again in a moment.");
+      return;
+    }
 
-    return () => clearInterval(interval); // Cleanup on unmount
-  }, []);
+    try {
+      if (onCall) {
+        onCall(callType);
+      } else if (startCall) {
+        startCall(userData.uid, callType);
+      } else {
+        toast.error("Call functionality is not available");
+      }
+    } catch (error) {
+      console.error("Call error:", error);
+      toast.error(`Failed to start call: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
 
   return (
     <div className="p-3 bg-[#000000] border-b border-gray-800 flex items-center justify-between">
@@ -161,56 +192,59 @@ export const ChatHeader = ({ user, onOpenSidebar, showMenuButton = false }: Chat
             {userData.displayName}
           </h2>
           <p className="text-xs text-gray-400">
-            {userData.status === "online" ? "online" : `${formatLastSeen(userData.lastSeen)}`}
+            {userData.status === "online" ? "online" : `Last seen: ${formatLastSeen(userData.lastSeen)}`}
           </p>
         </div>
       </div>
 
       <div className="flex items-center space-x-2">
-        <TooltipProvider >
-          <Tooltip >
-            <TooltipTrigger > <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => startCall(userData.uid, 'audio')}
-          className="text-gray-400 hover:text-white hover:bg-gray-700"
-        >
-          <Phone className="h-4 w-4" />
-        </Button>
-        </TooltipTrigger>
-            <TooltipContent ><p className="dark:bg-black text-white">Start audio call</p></TooltipContent>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleCall('audio')}
+                className="text-gray-400 hover:text-white hover:bg-gray-700"
+              >
+                <Phone className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent><p className="dark:bg-black text-white">Start audio call</p></TooltipContent>
           </Tooltip>
         </TooltipProvider>
 
-
-        <TooltipProvider >
-          <Tooltip >
-            <TooltipTrigger>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => startCall(userData.uid, 'video')}
-          className="text-gray-400 hover:text-white hover:bg-gray-700"
-        >
-          <Video className="h-4 w-4" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleCall('video')}
+                className="text-gray-400 hover:text-white hover:bg-gray-700"
+              >
+                <Video className="h-4 w-4" />
+              </Button>
             </TooltipTrigger>
-            <TooltipContent ><p className="dark:bg-black text-white">Start video call</p></TooltipContent>
-            </Tooltip >
-              </TooltipProvider >
+            <TooltipContent><p className="dark:bg-black text-white">Start video call</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
-
-
-        <TooltipProvider >
-          <Tooltip >
-            <TooltipTrigger>
-        <Button variant="ghost" size="sm" onClick={() => toast("Coming soon!")} className="text-gray-400 hover:text-white hover:bg-gray-700" >
-          <MoreVertical className="h-4 w-4 text-gray-400" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent ><p className="dark:bg-black text-white">More</p></TooltipContent>
-    </Tooltip >
-              </TooltipProvider >
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => toast("Coming soon!")}
+                className="text-gray-400 hover:text-white hover:bg-gray-700"
+              >
+                <MoreVertical className="h-4 w-4 text-gray-400" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent><p className="dark:bg-black text-white">More</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </div>
   )

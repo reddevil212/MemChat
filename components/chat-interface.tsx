@@ -17,9 +17,15 @@ import { MessageInput } from "./chat/components_chat_MessageInput"
 import { MessageList } from "./chat/components_chat_MessageList"
 import { WelcomeScreen } from "./chat/components_chat_WelcomeScreen"
 import { toast } from "sonner"
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable"
+import { IncomingCallDialog } from './call/components_call_IncomingCallDialog'
+import { CallInterface } from './call/components_call_CallInterface'
 
 function ChatContent() {
-  
   const isMobile = useMobile()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -35,7 +41,12 @@ function ChatContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isUploading, setIsUploading] = useState(false)
 
-  const { callState, startCall, endCall } = useCall()
+  // Track panel sizes
+  const [sidebarSize, setSidebarSize] = useState(isMobile ? 0 : 25)
+  const [chatSize, setChatSize] = useState(isMobile ? 100 : 75)
+
+  const callContext = useCall()
+  const { callState, startCall, endCall } = callContext
 
   const handleDragOver = (event: React.DragEvent) => {
     event.preventDefault()
@@ -152,6 +163,27 @@ function ChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  // Handle sidebar visibility in mobile view
+  useEffect(() => {
+    if (isMobile) {
+      if (sidebarOpen) {
+        setSidebarSize(100)
+        setChatSize(0)
+      } else {
+        setSidebarSize(0)
+        setChatSize(100)
+      }
+    } else {
+      if (!sidebarOpen) {
+        setSidebarSize(0)
+        setChatSize(100)
+      } else {
+        setSidebarSize(25)
+        setChatSize(75)
+      }
+    }
+  }, [sidebarOpen, isMobile])
+
   const handleSignOut = async () => {
     try {
       if (currentUser) {
@@ -164,10 +196,8 @@ function ChatContent() {
       document.cookie = "user_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
       window.location.reload()
     } catch (error) {
-      toast("Error signing out",{
-       
+      toast("Error signing out", {
         description: "Please try again",
-        
       })
     }
   }
@@ -182,10 +212,8 @@ function ChatContent() {
         setSidebarOpen(false)
       }
     } catch (error) {
-      toast("Error starting chat",{
-       
+      toast("Error starting chat", {
         description: "Please try again",
-       
       })
     }
   }
@@ -202,10 +230,8 @@ function ChatContent() {
       })
       setNewMessage("")
     } catch (error) {
-      toast("Error sending message",{
-       
+      toast("Error sending message", {
         description: "Please try again",
-        
       })
     }
   }
@@ -227,16 +253,13 @@ function ChatContent() {
         read: false,
       })
 
-      toast( "File uploaded",{
-      
+      toast("File uploaded", {
         description: "File has been sent successfully.",
       })
     } catch (error) {
       console.error("Error uploading file:", error)
-      toast("Upload failed",{
-       
+      toast("Upload failed", {
         description: "Could not upload file. Please try again.",
-       
       })
     } finally {
       setIsUploading(false)
@@ -275,16 +298,13 @@ function ChatContent() {
         read: false,
       })
 
-      toast("Voice message sent",{
-        
+      toast("Voice message sent", {
         description: "Voice message has been sent successfully.",
       })
     } catch (error) {
       console.error("Error sending voice message:", error)
-      toast("Send failed",{
-       
+      toast("Send failed", {
         description: "Could not send voice message. Please try again.",
-        
       })
     } finally {
       setIsUploading(false)
@@ -295,65 +315,107 @@ function ChatContent() {
     user.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // Toggle sidebar for mobile
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => !prev);
+  };
+
   return (
-    <Card className="flex h-screen bg-background lg:max-w-[1700px] sm:max-w-[320px] border-0"
+    <Card className="h-screen bg-black lg:max-w-[1700px] sm:max-w-[320px] overflow-hidden"
       onDragOver={handleDragOver}
       onDrop={handleDrop}>
 
-      {/* Sidebar */}
-      <ChatSidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        currentUser={currentUser}
-        users={filteredUsers}
-        chats={chats}
-        selectedChat={selectedChat}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onSignOut={handleSignOut}
-        onChatSelect={(chat) => {
-          setSelectedChat(chat)
-          setSidebarOpen(false)
+      <ResizablePanelGroup
+        direction="horizontal"
+        className="h-full bg-black rounded-lg border-0"
+        onLayout={(sizes) => {
+          if (!isMobile) {
+            setSidebarSize(sizes[0]);
+            setChatSize(sizes[1]);
+          }
         }}
-        onStartChat={startNewChat}
-      />
-
-      {/* Chat Area */}
-      <CardContent className={`${sidebarOpen ? "hidden" : "flex"} md:flex flex-1 flex-col h-full p-0`}>
-        {selectedChat && selectedChatUser ? (
-          <>
-            <ChatHeader
-              user={selectedChatUser}
-              onOpenSidebar={() => setSidebarOpen(true)}
-              showMenuButton={true}
-              onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)}
+      >
+        {/* Sidebar Panel */}
+        <ResizablePanel
+          defaultSize={sidebarSize}
+          minSize={isMobile ? 0 : 20}
+          maxSize={isMobile ? 100 : 40}
+          collapsible={!isMobile}
+          collapsedSize={0}
+          onCollapse={() => {
+            setSidebarOpen(false);
+          }}
+          onExpand={() => {
+            setSidebarOpen(true);
+          }}
+          className={`${isMobile && !sidebarOpen ? 'hidden' : ''}`}
+        >
+          <div className="h-full ">
+            <ChatSidebar
+              isOpen={true} // Always true as the ResizablePanel handles visibility
+              onClose={() => setSidebarOpen(false)}
+              currentUser={currentUser}
+              users={filteredUsers}
+              chats={chats}
+              selectedChat={selectedChat}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              onSignOut={handleSignOut}
+              onChatSelect={(chat) => {
+                setSelectedChat(chat);
+                if (isMobile) setSidebarOpen(false);
+              }}
+              onStartChat={startNewChat}
             />
+          </div>
+        </ResizablePanel>
 
-            {/* Messages Area */}
-            <div className="flex-1 scrolbar-thin overflow-y-auto p-4">
-              <MessageList
-                messages={messages}
-                currentUser={currentUser}
-                formatTime={(timestamp) => new Date(timestamp).toLocaleTimeString()}
+        {/* Resizable Handle */}
+        {(!isMobile || sidebarOpen) && <ResizableHandle  />}
+
+        {/* Chat Area Panel */}
+        <ResizablePanel
+          defaultSize={chatSize}
+          minSize={30}
+          className={`${isMobile && sidebarOpen ? 'hidden' : ''}`}
+        >
+          <div className="flex flex-col h-full">
+            {selectedChat && selectedChatUser ? (
+              <>
+                <ChatHeader
+                  user={selectedChatUser}
+                  onOpenSidebar={toggleSidebar}
+                  showMenuButton={true}
+                  onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)}
+                />
+
+                {/* Messages Area */}
+                <div className="flex-1  scrolbar-thin overflow-y-auto p-4">
+                  <MessageList
+                    messages={messages}
+                    currentUser={currentUser}
+                    formatTime={(timestamp) => new Date(timestamp).toLocaleTimeString()}
+                  />
+                  <div ref={messagesEndRef} />
+                </div>
+
+                <MessageInput
+                  message={newMessage}
+                  isUploading={isUploading}
+                  onMessageChange={setNewMessage}
+                  onSendMessage={handleSendMessage}
+                  onFileSelect={handleFileSelect}
+                  onVoiceMessageSend={handleVoiceMessageSend}
+                />
+              </>
+            ) : (
+              <WelcomeScreen
+                onOpenSidebar={toggleSidebar}
               />
-              <div ref={messagesEndRef} />
-            </div>
-
-            <MessageInput
-              message={newMessage}
-              isUploading={isUploading}
-              onMessageChange={setNewMessage}
-              onSendMessage={handleSendMessage}
-              onFileSelect={handleFileSelect}
-              onVoiceMessageSend={handleVoiceMessageSend}
-            />
-          </>
-        ) : (
-          <WelcomeScreen
-            onOpenSidebar={() => setSidebarOpen(true)}
-          />
-        )}
-      </CardContent>
+            )}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* Call UI Components */}
       <CallContext.Consumer>
@@ -362,14 +424,26 @@ function ChatContent() {
           const { callState, endCall } = callContext
 
           if (callState.isIncomingCall && !callState.callAccepted) {
-            // Incoming call UI
+            const caller = users.find(user => user.uid === callState.callerId);
+            return (
+              <IncomingCallDialog
+                callerName={caller?.displayName || 'Unknown Caller'}
+              />
+            );
           }
 
           if (callState.isOutgoingCall || callState.callAccepted) {
-            // Ongoing call UI
+            const otherUser = users.find(
+              user => user.uid === (callState.calleeId || callState.callerId)
+            );
+            return (
+              <CallInterface
+                recipientName={otherUser?.displayName || 'Unknown User'}
+              />
+            );
           }
 
-          return null
+          return null;
         }}
       </CallContext.Consumer>
     </Card>
@@ -401,7 +475,7 @@ export default function ChatInterface() {
   if (!currentUser) {
     return (
       <Card className="flex items-center justify-center min-h-screen bg-muted/30 animate-fadeIn border-0">
-        <CardContent className="text-center relative w-full">
+        <CardContent className="text-center bg-black relative w-full">
           <div className="absolute inset-0 bg-background blur-lg opacity-50"></div>
           <CardTitle className="text-4xl font-semibold text-foreground mb-4 animate-pulse">
             Be patient, your conversations are loading...
