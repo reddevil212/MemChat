@@ -24,14 +24,15 @@ const formatLastSeen = (lastSeen: any): string => {
   if (isNaN(date.getTime())) return "Unknown"; // Invalid date fallback
 
   const now = new Date(); // Current date and time
-  const tomorrow = new Date(now); // Create a date object for tomorrow
-  tomorrow.setDate(now.getDate() + 1);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1); // Create a date object for yesterday
 
   // Format for today
   if (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
   ) {
     return `today at ${date.toLocaleTimeString(undefined, {
       hour: '2-digit',
@@ -39,13 +40,13 @@ const formatLastSeen = (lastSeen: any): string => {
     })}`;
   }
 
-  // Format for tomorrow
+  // Format for yesterday
   if (
-    date.getFullYear() === tomorrow.getFullYear() &&
-    date.getMonth() === tomorrow.getMonth() &&
-    date.getDate() === tomorrow.getDate()
+    date.getFullYear() === yesterday.getFullYear() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getDate() === yesterday.getDate()
   ) {
-    return `tomorrow at ${date.toLocaleTimeString(undefined, {
+    return `yesterday at ${date.toLocaleTimeString(undefined, {
       hour: '2-digit',
       minute: '2-digit',
     })}`;
@@ -70,7 +71,7 @@ interface ChatHeaderProps {
 
 export const ChatHeader = ({ user, onOpenSidebar, showMenuButton = false }: ChatHeaderProps) => {
   const { startCall } = useCall()
- 
+
 
   return (
     <div className="p-3 bg-[#1e1d1d] border-b border-gray-800 flex items-center justify-between">
@@ -96,7 +97,7 @@ export const ChatHeader = ({ user, onOpenSidebar, showMenuButton = false }: Chat
             {user.displayName}
           </h2>
           <p className="text-xs text-gray-400">
-            {user.status === "online" ? "online" : `last seen ${formatLastSeen(user.lastSeen)}`}
+            {user.status === "online" ? "online" : ` ${formatLastSeen(user.lastSeen)}`}
           </p>
         </div>
       </div>

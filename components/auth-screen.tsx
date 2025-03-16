@@ -1,201 +1,379 @@
 "use client"
 
-import { useCallback } from "react"
-import { MessageSquare } from "lucide-react"
+import { useCallback, useState, useEffect } from "react"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import * as z from "zod"
 import { AuthService } from "./auth-service"
-import { useAuthForm } from "./use-auth-form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
 import { GoogleIcon } from "./icons_GoogleIcon"
+import { Separator } from "@/components/ui/separator"
+import { Moon, Sun, MessageSquare } from "lucide-react"
+import { useTheme } from "next-themes"
+import { motion, AnimatePresence } from "framer-motion"
+import { Switch } from "@/components/ui/switch"
+
+// Login form schema
+const loginFormSchema = z.object({
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  password: z.string().min(1, { message: "Password is required" }),
+})
+
+// Register form schema
+const registerFormSchema = z.object({
+  name: z.string().min(1, { message: "Name is required" }),
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+})
+
+type LoginFormValues = z.infer<typeof loginFormSchema>
+type RegisterFormValues = z.infer<typeof registerFormSchema>
 
 export default function AuthScreen() {
-  const loginForm = useAuthForm({ email: "", password: "" })
-  const registerForm = useAuthForm({ email: "", password: "", name: "" })
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const { theme, setTheme } = useTheme()
 
-  const handleAuth = useCallback(async (
-    type: "login" | "register",
-    e: React.FormEvent
-  ) => {
-    e.preventDefault()
-    const { setLoading, setError, formState, resetForm } = type === "login" ? loginForm : registerForm
+  // Handle theme mounting
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-    setLoading(true)
+  // Login form
+  const loginForm = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  })
+
+  // Register form
+  const registerForm = useForm<RegisterFormValues>({
+    resolver: zodResolver(registerFormSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+    },
+  })
+
+  const onLoginSubmit = useCallback(async (data: LoginFormValues) => {
+    setIsLoading(true)
     setError(null)
 
     try {
-      if (type === "login") {
-        await AuthService.emailSignIn(formState)
-      } else {
-        if (!formState.name) throw new Error("Name is required")
-        await AuthService.emailSignUp(formState as Required<typeof formState>)
-      }
-      resetForm()
+      await AuthService.emailSignIn(data)
+      loginForm.reset()
       window.location.reload()
     } catch (err: any) {
-      setError({ message: err.message || `Failed to ${type}` })
+      setError(err.message || "Failed to login")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
-  }, [loginForm, registerForm])
+  }, [loginForm])
+
+  const onRegisterSubmit = useCallback(async (data: RegisterFormValues) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      await AuthService.emailSignUp(data)
+      registerForm.reset()
+      window.location.reload()
+    } catch (err: any) {
+      setError(err.message || "Failed to register")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [registerForm])
 
   const handleGoogleAuth = useCallback(async () => {
-    loginForm.setLoading(true)
-    loginForm.setError(null)
+    setIsLoading(true)
+    setError(null)
 
     try {
       await AuthService.googleSignIn()
       window.location.reload()
     } catch (err: any) {
-      loginForm.setError({ message: err.message || "Failed to login with Google" })
+      setError(err.message || "Failed to login with Google")
     } finally {
-      loginForm.setLoading(false)
+      setIsLoading(false)
     }
-  }, [loginForm])
+  }, [])
+
+  if (!mounted) {
+    return null
+  }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-[#1e1d1d] p-4">
-      <Card className="w-full max-w-md bg-[#2a2a2a] border-gray-800 shadow-xl">
-        <CardHeader className="space-y-1 flex flex-col items-center border-b border-gray-800">
-          <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mb-4">
-            <MessageSquare className="h-8 w-8 text-white" />
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={theme}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.5 }}
+        className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-black text-black dark:text-white p-6 md:p-8"
+      >
+        <div className="absolute top-4 right-4 flex items-center space-x-2">
+          <Switch
+            checked={theme === "dark"}
+            onCheckedChange={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label="Toggle theme"
+          />
+          <Sun className="h-5 w-5" />
+          <Moon className="h-5 w-5" />
+        </div>
+
+        <motion.div
+          initial={{ scale: 0.95 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="flex flex-col items-center mb-8"
+        >
+          <div className="w-20 h-20 rounded-full  flex items-center justify-center mb-4">
+            <MessageSquare className="h-10 w-10" />
           </div>
-          <CardTitle className="text-xl text-white">MemChat</CardTitle>
-          <CardDescription className="text-gray-400 text-sm">
-            Connect with friends and family
-          </CardDescription>
-        </CardHeader>
+          <h1 className="text-4xl font-bold tracking-tight">MemChat</h1>
+          <p className="mt-2">Connect seamlessly. Chat endlessly.</p>
+        </motion.div>
 
-        <CardContent className="pt-4">
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 bg-[#1e1d1d] p-1 gap-1">
-              <TabsTrigger
-                value="login"
-                className="data-[state=active]:bg-[#2a2a2a] data-[state=active]:text-white text-gray-400"
-              >
-                Login
-              </TabsTrigger>
-              <TabsTrigger
-                value="register"
-                className="data-[state=active]:bg-[#2a2a2a] data-[state=active]:text-white text-gray-400"
-              >
-                Register
-              </TabsTrigger>
-            </TabsList>
-
-            {(loginForm.error || registerForm.error) && (
-              <div className="bg-red-900/20 border border-red-800 text-red-400 px-3 py-2 rounded mt-4 text-sm">
-                {loginForm.error?.message || registerForm.error?.message}
-              </div>
-            )}
-
-            <TabsContent value="login">
-              <form onSubmit={(e) => handleAuth("login", e)} className="space-y-4 mt-4">
-                <AuthInput
-                  label="Email"
-                  name="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={loginForm.formState.email}
-                  onChange={loginForm.handleInputChange}
-                />
-                <AuthInput
-                  label="Password"
-                  name="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={loginForm.formState.password}
-                  onChange={loginForm.handleInputChange}
-                />
-                <Button
-                  type="submit"
-                  className="w-full bg-green-500 hover:bg-green-600 text-white transition-colors"
-                  disabled={loginForm.loading}
+        <Card className="w-full max-w-lg shadow-lg border-0 overflow-hidden bg-white dark:bg-black">
+          <CardContent className="p-0">
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid dark:bg-black w-full grid-cols-2 h-14">
+                <TabsTrigger
+                  value="login"
+                  className="text-base relative"
                 >
-                  {loginForm.loading ? "Logging in..." : "Login"}
-                </Button>
-                <Button
-                  type="button"
-                  className="w-full bg-[#1e1d1d] hover:bg-[#252525] text-white border border-gray-700 transition-colors"
-                  onClick={handleGoogleAuth}
-                  disabled={loginForm.loading}
-                >
-                  {loginForm.loading ? (
-                    "Logging in..."
-                  ) : (
-                    <div className="flex items-center justify-center gap-2">
-                      <GoogleIcon className="w-5 h-5" />
-                      <span>Login with Google</span>
-                    </div>
+                  Sign In
+                  {theme === "dark" && (
+                    <motion.div
+                      layoutId="outline"
+                      className="absolute inset-0 "
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
                   )}
-                </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="register">
-              <form onSubmit={(e) => handleAuth("register", e)} className="space-y-4 mt-4">
-                <AuthInput
-                  label="Full Name"
-                  name="name"
-                  placeholder="John Doe"
-                  value={registerForm.formState.name || ""}
-                  onChange={registerForm.handleInputChange}
-                />
-                <AuthInput
-                  label="Email"
-                  name="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={registerForm.formState.email}
-                  onChange={registerForm.handleInputChange}
-                />
-                <AuthInput
-                  label="Password"
-                  name="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={registerForm.formState.password}
-                  onChange={registerForm.handleInputChange}
-                />
-                <Button
-                  type="submit"
-                  className="w-full bg-green-500 hover:bg-green-600 text-white transition-colors"
-                  disabled={registerForm.loading}
+                  {theme === "light" && (
+                    <motion.div
+                      layoutId="outline"
+                      className="absolute inset-0 "
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="register"
+                  className="text-base relative"
                 >
-                  {registerForm.loading ? "Creating account..." : "Register"}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
+                  Create Account
+                  {theme === "dark" && (
+                    <motion.div
+                      layoutId="outline"
+                      className="absolute inset-0 "
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                  {theme === "light" && (
+                    <motion.div
+                      layoutId="outline"
+                      className="absolute inset-0 "
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                </TabsTrigger>
+              </TabsList>
 
-        <CardFooter className="flex justify-center border-t border-gray-800">
-          <p className="text-xs text-gray-400">
-            By continuing, you agree to our Terms of Service
-          </p>
-        </CardFooter>
-      </Card>
-    </div>
-  )
-}
+              <div className="p-6">
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="bg-gray-100 dark:bg-gray-800 border  dark:border-gray-600 text-red-700 px-4 py-3 rounded-md mb-4 text-sm"
+                  >
+                    {error}
+                  </motion.div>
+                )}
 
-interface AuthInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string
-}
+                <TabsContent value="login" className="mt-0 pt-2">
+                  <motion.div
+                    initial={{ x: 100, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -100, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  >
+                    <Form {...loginForm}>
+                      <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-5">
+                        <FormField
+                          control={loginForm.control}
+                          name="email"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm font-medium">Email</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="name@example.com"
+                                  type="email"
+                                  className="h-11"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={loginForm.control}
+                          name="password"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm font-medium">Password</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="••••••••"
+                                  type="password"
+                                  className="h-11"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <Button
+                          type="submit"
+                          className="w-full h-11 font-medium"
+                          disabled={isLoading}
+                        >
+                          {isLoading ? "Authenticating..." : "Sign In"}
+                        </Button>
 
-function AuthInput({ label, ...props }: AuthInputProps) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={props.name} className="text-gray-300 text-sm">
-        {label}
-      </Label>
-      <Input
-        {...props}
-        required
-        className="bg-[#1e1d1d] border-gray-700 text-white focus:ring-1 focus:ring-gray-600 text-sm"
-      />
-    </div>
+                        <div className="relative my-5">
+                          <Separator />
+                          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-black px-2 text-xs">
+                            OR CONTINUE WITH
+                          </span>
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full h-11 font-medium"
+                          onClick={handleGoogleAuth}
+                          disabled={isLoading}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <GoogleIcon className="w-5 h-5" />
+                            <span>Google</span>
+                          </div>
+                        </Button>
+                      </form>
+                    </Form>
+                  </motion.div>
+                </TabsContent>
+
+                <TabsContent value="register" className="mt-0 pt-2">
+                  <motion.div
+                    initial={{ x: -100, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: 100, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  >
+                    <Form {...registerForm}>
+                      <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-5">
+                        <FormField
+                          control={registerForm.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm font-medium">Full Name</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="John Doe"
+                                  className="h-11"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={registerForm.control}
+                          name="email"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm font-medium">Email</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="name@example.com"
+                                  type="email"
+                                  className="h-11"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={registerForm.control}
+                          name="password"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm font-medium">Password</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="At least 6 characters"
+                                  type="password"
+                                  className="h-11"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <Button
+                          type="submit"
+                          className="w-full h-11 font-medium"
+                          disabled={isLoading}
+                        >
+                          {isLoading ? "Creating Account..." : "Create Account"}
+                        </Button>
+                      </form>
+                    </Form>
+                  </motion.div>
+                </TabsContent>
+              </div>
+            </Tabs>
+          </CardContent>
+
+          <CardFooter className="flex justify-center px-6 py-4 text-center">
+            <p className="text-xs">
+              By continuing, you agree to our <span className="underline cursor-pointer">Terms</span> & <span className="underline cursor-pointer">Privacy Policy</span>
+            </p>
+          </CardFooter>
+        </Card>
+
+        <p className="text-xs mt-6">
+          © {new Date().getFullYear()} MemChat. All rights reserved.
+        </p>
+      </motion.div>
+    </AnimatePresence>
   )
 }

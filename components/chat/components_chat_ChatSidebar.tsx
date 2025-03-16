@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Search, LogOut, X } from "lucide-react"
-import { formatTime, getInitials } from "../utils/lib_utils (1)"
+import { formatMessageTime, formatTime, getInitials } from "../utils/lib_utils (1)"
 
 // Add Chat interface since it's used but not imported
 interface Chat {
@@ -101,7 +101,7 @@ const ChatsList = ({ chats, users, currentUser, selectedChat, onChatSelect }: Ch
                 </h4>
                 {chat.lastMessage && (
                   <span className="text-[10px] text-gray-400">
-                    {formatTime(chat.lastMessage.timestamp)}
+                    {formatMessageTime(chat.lastMessage.timestamp)}
                   </span>
                 )}
               </div>
