@@ -6,6 +6,7 @@
     "dev": " next dev --turbopack",
     "build": "next build",
     "start": "next start",
+
     "lint": "next lint"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "react": "^19.0.0",
     "react-audio-player": "^0.17.0",
     "react-dom": "^19.0.0",
+    "react-feather": "^2.0.10",
     "react-file-viewer": "^1.2.1",
     "react-hook-form": "^7.54.2",
     "react-mic": "^12.4.6",

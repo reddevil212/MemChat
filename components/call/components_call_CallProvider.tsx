@@ -13,17 +13,17 @@ import {
 } from 'firebase/firestore'
 import { User } from '../types/types_chat'
 
-interface CallState {
-  isIncomingCall: boolean
-  isOutgoingCall: boolean
-  remoteStream: MediaStream | null
-  localStream: MediaStream | null
-  callType: 'audio' | 'video' | null
-  callerId: string | null
-  calleeId: string | null
-  connectionState: RTCPeerConnectionState | null
-  error: string | null
-}
+type CallState = {
+  connectionState: RTCPeerConnectionState | null;
+  isIncomingCall: boolean;
+  isOutgoingCall: boolean;
+  remoteStream: MediaStream | null;
+  localStream: MediaStream | null;
+  callType: 'audio' | 'video' | null;
+  callerId: string | null;
+  calleeId: string | null;
+  error: string | null;
+};
 
 interface CallContextType {
   callState: CallState
@@ -141,16 +141,12 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children, currentUse
 
       // Setup connection monitoring
       peerConnection.current.oniceconnectionstatechange = () => {
-        console.log('ICE Connection State:', peerConnection.current?.iceConnectionState)
+        console.log('ICE Connection State:', peerConnection.current?.iceConnectionState);
         setCallState(prev => ({
           ...prev,
-          connectionState: peerConnection.current?.iceConnectionState || null
-        }))
-
-        if (peerConnection.current?.iceConnectionState === 'failed') {
-          cleanup()
-        }
-      }
+          connectionState: peerConnection.current?.iceConnectionState as RTCPeerConnectionState || null
+        }));
+      };
 
       peerConnection.current.onicecandidate = handleICECandidate
 

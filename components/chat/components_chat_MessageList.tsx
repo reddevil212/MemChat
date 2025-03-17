@@ -1,18 +1,31 @@
+"use client"
+
 import { Message, User } from "../types/types_chat"
-import { FilePreview } from "./components_chat_FilePreview"
-import { formatMessageTime } from "../utils/lib_utils (1)"
+import { AnimatePresence } from "framer-motion"
+import { MessageItem } from "./components_chat_components_chat_MessageItem"
 
 interface MessageListProps {
   messages: Message[]
   currentUser: User | null
   formatTime: (timestamp: string) => string
+  onEditMessage: (messageId: string, newText: string) => Promise<void>
+  onDeleteMessage: (messageId: string, isLastMessage: boolean) => Promise<void>
+  onReactToMessage: (messageId: string, emoji: string) => Promise<void>
+  onReplyToMessage: (message: Message) => void
 }
 
-export const MessageList = ({ messages, currentUser, formatTime }: MessageListProps) => {
+export const MessageList = ({
+  messages,
+  currentUser,
+  onEditMessage,
+  onDeleteMessage,
+  onReactToMessage,
+  onReplyToMessage
+}: MessageListProps) => {
   if (messages.length === 0) {
     return (
-      <div className="h-full flex scrollbar items-center justify-center">
-        <div className="text-center text-gray-400">
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center text-muted-foreground">
           <p className="text-sm">No messages yet</p>
           <p className="text-xs mt-1">Send a message to start the conversation</p>
         </div>
@@ -20,47 +33,32 @@ export const MessageList = ({ messages, currentUser, formatTime }: MessageListPr
     )
   }
 
+  // Helper function to find the original message being replied to
+  const findReplyMessage = (replyToId: string | undefined | null) => {
+    if (!replyToId) return null
+    return messages.find(m => m.id === replyToId)
+  }
+
   return (
-    <>
-      {messages.map((message) => {
-        const isCurrentUser = message.senderId === currentUser?.uid
+    <div className="space-y-4">
+      <AnimatePresence initial={false}>
+        {messages.map((message, index) => {
+          const replyToMessage = findReplyMessage(message.replyToId)
 
-        return (
-          <div
-            key={message.id}
-            className={`flex ${isCurrentUser ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[75%] rounded-lg px-3 py-2 mb-3 ${isCurrentUser
-                ? "bg-blue-500 text-white"
-                : "bg-[#2a2a2a] text-white"
-                }`}
-            >
-              {message.fileUrl && message.fileType && (
-                <FilePreview message={message} />
-              )}
-
-              {message.text && (
-                <p className="text-sm whitespace-pre-wrap break-words">
-                  {message.text}
-                </p>
-              )}
-
-              <div
-                className={`text-[10px] mt-1 flex items-center justify-end
-                ${isCurrentUser ? "text-blue-100" : "text-gray-400"}`}
-              >
-                {formatMessageTime(message.timestamp)}
-                {isCurrentUser && (
-                  <span className="ml-1">
-                    {message.read ? "✓✓" : "✓"}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      })}
-    </>
+          return (
+            <MessageItem
+              key={message.id || index}
+              message={message}
+              currentUser={currentUser}
+              isLastMessage={index === messages.length - 1}
+              onEditMessage={onEditMessage}
+              onDeleteMessage={onDeleteMessage}
+              onReactToMessage={onReactToMessage}
+              onReplyToMessage={onReplyToMessage}
+            />
+          )
+        })}
+      </AnimatePresence>
+    </div>
   )
 }

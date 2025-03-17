@@ -1,0 +1,198 @@
+[debug] [2025-03-17T04:42:31.850Z] ----------------------------------------------------------------------
+[debug] [2025-03-17T04:42:31.853Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\sayan\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2025-03-17T04:42:31.854Z] CLI Version:   13.34.0
+[debug] [2025-03-17T04:42:31.854Z] Platform:      win32
+[debug] [2025-03-17T04:42:31.854Z] Node Version:  v22.13.1
+[debug] [2025-03-17T04:42:31.854Z] Time:          Mon Mar 17 2025 10:12:31 GMT+0530 (India Standard Time)
+[debug] [2025-03-17T04:42:31.854Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-03-17T04:42:31.858Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2025-03-17T04:42:31.911Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-03-17T04:42:31.911Z] > authorizing via signed-in user (sayanpal687@gmail.com)
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\sayan\Desktop\MemChat
+
+[debug] [2025-03-17T04:42:34.033Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2025-03-17T04:42:34.033Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] but for now we'll just set up a default project.
+[info] 
+[debug] [2025-03-17T04:43:08.845Z] Checked if tokens are valid: false, expires at: 1732016416720
+[debug] [2025-03-17T04:43:08.845Z] Checked if tokens are valid: false, expires at: 1732016416720
+[debug] [2025-03-17T04:43:08.846Z] > refreshing access token with scopes: []
+[debug] [2025-03-17T04:43:08.847Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-03-17T04:43:08.847Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-03-17T04:43:10.375Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-03-17T04:43:10.375Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-03-17T04:43:10.390Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=100
+[debug] [2025-03-17T04:43:11.966Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2025-03-17T04:43:11.966Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[info] i  Using project slidesavvy-6ab43 (SlideSavvy) 
+[info] 
+=== Firestore Setup
+[debug] [2025-03-17T04:43:16.201Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:16.202Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:16.202Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/slidesavvy-6ab43/services/firestore.googleapis.com [none]
+[debug] [2025-03-17T04:43:16.202Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/slidesavvy-6ab43/services/firestore.googleapis.com x-goog-quota-user=projects/slidesavvy-6ab43
+[debug] [2025-03-17T04:43:18.359Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/slidesavvy-6ab43/services/firestore.googleapis.com 200
+[debug] [2025-03-17T04:43:18.359Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/slidesavvy-6ab43/services/firestore.googleapis.com [omitted]
+[debug] [2025-03-17T04:43:18.360Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:18.360Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:18.360Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default) [none]
+[debug] [2025-03-17T04:43:20.348Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default) 200
+[debug] [2025-03-17T04:43:20.348Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default) {"name":"projects/slidesavvy-6ab43/databases/(default)","uid":"5eef7872-aba2-4a94-a4a5-e5ef01a0eb87","createTime":"2024-10-23T13:46:45.688299Z","updateTime":"2024-10-23T13:46:45.688299Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2025-03-17T03:43:25.862523Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","etag":"ILG3me6mkIwDMNnYupffhYwD"}
+[debug] [2025-03-17T04:43:20.348Z] database_type: FIRESTORE_NATIVE
+[debug] [2025-03-17T04:43:20.348Z] database_type: FIRESTORE_NATIVE
+[debug] [2025-03-17T04:43:20.348Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-03-17T04:43:20.348Z] > authorizing via signed-in user (sayanpal687@gmail.com)
+[debug] [2025-03-17T04:43:20.348Z] [iam] checking project slidesavvy-6ab43 for permissions ["firebase.projects.get"]
+[debug] [2025-03-17T04:43:20.349Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:20.349Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:20.349Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions [none]
+[debug] [2025-03-17T04:43:20.349Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions x-goog-quota-user=projects/slidesavvy-6ab43
+[debug] [2025-03-17T04:43:20.349Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2025-03-17T04:43:22.248Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions 200
+[debug] [2025-03-17T04:43:22.248Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions {"permissions":["firebase.projects.get"]}
+[info] 
+[info] Firestore Security Rules allow you to define how and when to allow
+[info] requests. You can keep these rules in your project directory
+[info] and publish them with firebase deploy.
+[info] 
+[debug] [2025-03-17T04:43:37.471Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:37.471Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:37.472Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/slidesavvy-6ab43/releases pageSize=10&pageToken=
+[debug] [2025-03-17T04:43:49.467Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/slidesavvy-6ab43/releases 200
+[debug] [2025-03-17T04:43:49.467Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/slidesavvy-6ab43/releases {"releases":[{"name":"projects/slidesavvy-6ab43/releases/cloud.firestore","rulesetName":"projects/slidesavvy-6ab43/rulesets/8f516212-e9ff-4fcb-876b-0475834c024c","createTime":"2024-10-23T13:46:56.763897Z","updateTime":"2024-10-23T14:51:35.330125Z"},{"name":"projects/slidesavvy-6ab43/releases/firebase.storage/slidesavvy-6ab43.appspot.com","rulesetName":"projects/slidesavvy-6ab43/rulesets/0102e6a7-d1f1-46ec-bffe-7101ad1404bf","createTime":"2024-10-23T13:47:52.388292Z","updateTime":"2024-10-23T14:50:29.248549Z"}]}
+[debug] [2025-03-17T04:43:49.467Z] Found ruleset: projects/slidesavvy-6ab43/rulesets/8f516212-e9ff-4fcb-876b-0475834c024c
+[debug] [2025-03-17T04:43:49.468Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:49.468Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:49.468Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/slidesavvy-6ab43/rulesets/8f516212-e9ff-4fcb-876b-0475834c024c [none]
+[debug] [2025-03-17T04:43:50.892Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/slidesavvy-6ab43/rulesets/8f516212-e9ff-4fcb-876b-0475834c024c 200
+[debug] [2025-03-17T04:43:50.892Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/slidesavvy-6ab43/rulesets/8f516212-e9ff-4fcb-876b-0475834c024c [omitted]
+[info] 
+[info] Firestore indexes allow you to perform complex queries while
+[info] maintaining performance that scales with the size of the result
+[info] set. You can keep index definitions in your project directory
+[info] and publish them with firebase deploy.
+[info] 
+[debug] [2025-03-17T04:43:53.407Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:53.407Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:53.407Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:53.408Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:53.408Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default)/collectionGroups/-/indexes [none]
+[debug] [2025-03-17T04:43:53.410Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* [none]
+[debug] [2025-03-17T04:43:56.761Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default)/collectionGroups/-/indexes 200
+[debug] [2025-03-17T04:43:56.761Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default)/collectionGroups/-/indexes {"indexes":[{"name":"projects/slidesavvy-6ab43/databases/(default)/collectionGroups/users/indexes/CICAgOjXh4EK","queryScope":"COLLECTION","fields":[{"fieldPath":"email_lower","order":"ASCENDING"},{"fieldPath":"name_lower","order":"ASCENDING"},{"fieldPath":"username_lower","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/slidesavvy-6ab43/databases/(default)/collectionGroups/chats/indexes/CICAgJiUpoMK","queryScope":"COLLECTION","fields":[{"fieldPath":"participants","arrayConfig":"CONTAINS"},{"fieldPath":"lastMessageAt","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"}]}
+[debug] [2025-03-17T04:43:56.762Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* 200
+[debug] [2025-03-17T04:43:56.763Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* {"fields":[{"name":"projects/slidesavvy-6ab43/databases/(default)/collectionGroups/__default__/fields/*","indexConfig":{"indexes":[{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","order":"ASCENDING"}],"state":"READY"},{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","order":"DESCENDING"}],"state":"READY"},{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","arrayConfig":"CONTAINS"}],"state":"READY"}]}}]}
+[info] 
+=== Hosting Setup
+[debug] [2025-03-17T04:43:56.768Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:56.768Z] Checked if tokens are valid: true, expires at: 1742190189375
+[debug] [2025-03-17T04:43:56.768Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/slidesavvy-6ab43 [none]
+[debug] [2025-03-17T04:43:59.291Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/slidesavvy-6ab43 200
+[debug] [2025-03-17T04:43:59.292Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/slidesavvy-6ab43 {"projectId":"slidesavvy-6ab43","projectNumber":"1033040450012","displayName":"SlideSavvy","name":"projects/slidesavvy-6ab43","resources":{"hostingSite":"slidesavvy-6ab43","realtimeDatabaseInstance":"slidesavvy-6ab43-default-rtdb","locationId":"us-central"},"state":"ACTIVE","etag":"1_2c68b390-edab-47ae-a65a-91b7159e126c"}
+[info] 
+[info] Your public directory is the folder (relative to your project directory) that
+[info] will contain Hosting assets to be uploaded with firebase deploy. If you
+[info] have a build process for your assets, use your build's output directory.
+[info] 
+[debug] [2025-03-17T08:06:21.682Z] ----------------------------------------------------------------------
+[debug] [2025-03-17T08:06:21.684Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\sayan\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2025-03-17T08:06:21.685Z] CLI Version:   13.34.0
+[debug] [2025-03-17T08:06:21.685Z] Platform:      win32
+[debug] [2025-03-17T08:06:21.685Z] Node Version:  v22.13.1
+[debug] [2025-03-17T08:06:21.685Z] Time:          Mon Mar 17 2025 13:36:21 GMT+0530 (India Standard Time)
+[debug] [2025-03-17T08:06:21.685Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-03-17T08:06:21.694Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-03-17T08:06:21.695Z] > authorizing via signed-in user (sayanpal687@gmail.com)
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\sayan\Desktop\MemChat
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] but for now we'll just set up a default project.
+[info] 
+[debug] [2025-03-17T08:06:37.610Z] Checked if tokens are valid: false, expires at: 1742190189375
+[debug] [2025-03-17T08:06:37.610Z] Checked if tokens are valid: false, expires at: 1742190189375
+[debug] [2025-03-17T08:06:37.611Z] > refreshing access token with scopes: []
+[debug] [2025-03-17T08:06:37.612Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-03-17T08:06:37.612Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-03-17T08:06:38.156Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-03-17T08:06:38.157Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-03-17T08:06:38.170Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=100
+[debug] [2025-03-17T08:06:39.197Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2025-03-17T08:06:39.197Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[info] i  Using project slidesavvy-6ab43 (SlideSavvy) 
+[info] 
+=== Firestore Setup
+[debug] [2025-03-17T08:06:43.334Z] Checked if tokens are valid: true, expires at: 1742202397157
+[debug] [2025-03-17T08:06:43.334Z] Checked if tokens are valid: true, expires at: 1742202397157
+[debug] [2025-03-17T08:06:43.334Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/slidesavvy-6ab43/services/firestore.googleapis.com [none]
+[debug] [2025-03-17T08:06:43.334Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/slidesavvy-6ab43/services/firestore.googleapis.com x-goog-quota-user=projects/slidesavvy-6ab43
+[debug] [2025-03-17T08:06:45.604Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/slidesavvy-6ab43/services/firestore.googleapis.com 200
+[debug] [2025-03-17T08:06:45.605Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/slidesavvy-6ab43/services/firestore.googleapis.com [omitted]
+[debug] [2025-03-17T08:06:45.605Z] Checked if tokens are valid: true, expires at: 1742202397157
+[debug] [2025-03-17T08:06:45.605Z] Checked if tokens are valid: true, expires at: 1742202397157
+[debug] [2025-03-17T08:06:45.605Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default) [none]
+[debug] [2025-03-17T08:06:47.738Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default) 200
+[debug] [2025-03-17T08:06:47.738Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/slidesavvy-6ab43/databases/(default) {"name":"projects/slidesavvy-6ab43/databases/(default)","uid":"5eef7872-aba2-4a94-a4a5-e5ef01a0eb87","createTime":"2024-10-23T13:46:45.688299Z","updateTime":"2024-10-23T13:46:45.688299Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2025-03-17T07:06:53.373913Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","etag":"IODmmKvUkIwDMNnYupffhYwD"}
+[debug] [2025-03-17T08:06:47.738Z] database_type: FIRESTORE_NATIVE
+[debug] [2025-03-17T08:06:47.738Z] database_type: FIRESTORE_NATIVE
+[debug] [2025-03-17T08:06:47.738Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-03-17T08:06:47.739Z] > authorizing via signed-in user (sayanpal687@gmail.com)
+[debug] [2025-03-17T08:06:47.739Z] [iam] checking project slidesavvy-6ab43 for permissions ["firebase.projects.get"]
+[debug] [2025-03-17T08:06:47.739Z] Checked if tokens are valid: true, expires at: 1742202397157
+[debug] [2025-03-17T08:06:47.739Z] Checked if tokens are valid: true, expires at: 1742202397157
+[debug] [2025-03-17T08:06:47.739Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions [none]
+[debug] [2025-03-17T08:06:47.739Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions x-goog-quota-user=projects/slidesavvy-6ab43
+[debug] [2025-03-17T08:06:47.739Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2025-03-17T08:06:49.817Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions 200
+[debug] [2025-03-17T08:06:49.817Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/slidesavvy-6ab43:testIamPermissions {"permissions":["firebase.projects.get"]}
+[info] 
+[info] Firestore Security Rules allow you to define how and when to allow
+[info] requests. You can keep these rules in your project directory
+[info] and publish them with firebase deploy.
+[info] 
+[info] 
+[info] Firestore indexes allow you to perform complex queries while
+[info] maintaining performance that scales with the size of the result
+[info] set. You can keep index definitions in your project directory
+[info] and publish them with firebase deploy.
+[info] 
+[info] 
+=== Hosting Setup
+[debug] [2025-03-17T08:06:57.199Z] Checked if tokens are valid: true, expires at: 1742202397157
+[debug] [2025-03-17T08:06:57.199Z] Checked if tokens are valid: true, expires at: 1742202397157
+[debug] [2025-03-17T08:06:57.199Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/slidesavvy-6ab43 [none]
+[debug] [2025-03-17T08:06:57.874Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/slidesavvy-6ab43 200
+[debug] [2025-03-17T08:06:57.875Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/slidesavvy-6ab43 {"projectId":"slidesavvy-6ab43","projectNumber":"1033040450012","displayName":"SlideSavvy","name":"projects/slidesavvy-6ab43","resources":{"hostingSite":"slidesavvy-6ab43","realtimeDatabaseInstance":"slidesavvy-6ab43-default-rtdb","locationId":"us-central"},"state":"ACTIVE","etag":"1_2c68b390-edab-47ae-a65a-91b7159e126c"}
+[info] 
+[info] Your public directory is the folder (relative to your project directory) that
+[info] will contain Hosting assets to be uploaded with firebase deploy. If you
+[info] have a build process for your assets, use your build's output directory.
+[info] 

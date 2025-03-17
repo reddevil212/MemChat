@@ -3,9 +3,9 @@
 
 import { useState, useEffect, useRef } from "react"
 import { onAuthStateChanged, signOut } from "firebase/auth"
-import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, onSnapshot } from "firebase/firestore"
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, onSnapshot, limit } from "firebase/firestore"
 import { auth, db } from "@/lib/lib_firebase"
-import { User, Chat, Message } from "./types/types_chat"
+import { User, Chat, Message, Reaction } from "./types/types_chat"
 import { CallContext } from "./contexts/contexts_CallContext"
 import { chatService } from "./services/lib_services_chat"
 import { useToast } from "@/hooks/use-toast"
@@ -18,9 +18,15 @@ import { MessageInput } from "./chat/components_chat_MessageInput"
 import { MessageList } from "./chat/components_chat_MessageList"
 import { WelcomeScreen } from "./chat/components_chat_WelcomeScreen"
 import { toast } from "sonner"
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable"
+import { IncomingCallDialog } from './call/components_call_IncomingCallDialog'
+import { CallInterface } from './call/components_call_CallInterface'
 
 function ChatContent() {
-  
   const isMobile = useMobile()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -36,7 +42,12 @@ function ChatContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isUploading, setIsUploading] = useState(false)
 
-  const { callState, startCall, endCall } = useCall()
+  // Track panel sizes
+  const [sidebarSize, setSidebarSize] = useState(isMobile ? 0 : 25)
+  const [chatSize, setChatSize] = useState(isMobile ? 100 : 75)
+
+  const callContext = useCall()
+  const { callState, startCall, endCall } = callContext
 
   const handleDragOver = (event: React.DragEvent) => {
     event.preventDefault()
@@ -153,6 +164,27 @@ function ChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  // Handle sidebar visibility in mobile view
+  useEffect(() => {
+    if (isMobile) {
+      if (sidebarOpen) {
+        setSidebarSize(100)
+        setChatSize(0)
+      } else {
+        setSidebarSize(0)
+        setChatSize(100)
+      }
+    } else {
+      if (!sidebarOpen) {
+        setSidebarSize(0)
+        setChatSize(100)
+      } else {
+        setSidebarSize(25)
+        setChatSize(75)
+      }
+    }
+  }, [sidebarOpen, isMobile])
+
   const handleSignOut = async () => {
     try {
       if (currentUser) {
@@ -165,10 +197,8 @@ function ChatContent() {
       document.cookie = "user_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
       window.location.reload()
     } catch (error) {
-      toast("Error signing out",{
-       
+      toast("Error signing out", {
         description: "Please try again",
-        
       })
     }
   }
@@ -183,10 +213,8 @@ function ChatContent() {
         setSidebarOpen(false)
       }
     } catch (error) {
-      toast("Error starting chat",{
-       
+      toast("Error starting chat", {
         description: "Please try again",
-       
       })
     }
   }
@@ -203,10 +231,8 @@ function ChatContent() {
       })
       setNewMessage("")
     } catch (error) {
-      toast("Error sending message",{
-       
+      toast("Error sending message", {
         description: "Please try again",
-        
       })
     }
   }
@@ -228,16 +254,13 @@ function ChatContent() {
         read: false,
       })
 
-      toast( "File uploaded",{
-      
+      toast("File uploaded", {
         description: "File has been sent successfully.",
       })
     } catch (error) {
       console.error("Error uploading file:", error)
-      toast("Upload failed",{
-       
+      toast("Upload failed", {
         description: "Could not upload file. Please try again.",
-       
       })
     } finally {
       setIsUploading(false)
@@ -276,85 +299,191 @@ function ChatContent() {
         read: false,
       })
 
-      toast("Voice message sent",{
-        
+      toast("Voice message sent", {
         description: "Voice message has been sent successfully.",
       })
     } catch (error) {
       console.error("Error sending voice message:", error)
-      toast("Send failed",{
-       
+      toast("Send failed", {
         description: "Could not send voice message. Please try again.",
-        
       })
     } finally {
       setIsUploading(false)
     }
   }
 
+  // Message action handlers
+  const handleEditMessage = async (messageId: string, newText: string) => {
+    if (!selectedChat || !currentUser) return;
+
+    try {
+      const message = messages.find(m => m.id === messageId);
+
+      // Only allow editing own messages
+      if (message && message.senderId === currentUser.uid) {
+        await chatService.editMessage(selectedChat.id, messageId, newText);
+
+        toast("Message edited", {
+          description: "Your message has been updated",
+        });
+      }
+    } catch (error) {
+      console.error("Error editing message:", error);
+      toast("Edit failed", {
+        description: "Could not edit the message. Please try again.",
+      });
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string, isLastMessage: boolean) => {
+    if (!selectedChat || !currentUser) return;
+
+    try {
+      const message = messages.find(m => m.id === messageId);
+
+      // Only allow deleting own messages
+      if (message && message.senderId === currentUser.uid) {
+        await chatService.deleteMessage(selectedChat.id, messageId, isLastMessage);
+
+        toast("Message deleted", {
+          description: "Your message has been removed",
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      toast("Delete failed", {
+        description: "Could not delete the message. Please try again.",
+      });
+    }
+  };
+
+  const handleReactToMessage = async (messageId: string, emoji: string) => {
+    if (!selectedChat || !currentUser) return;
+
+    try {
+      // Use the simplified toggle reaction function
+      await chatService.toggleReaction(
+        selectedChat.id,
+        messageId,
+        currentUser.uid,
+        emoji
+      );
+    } catch (error) {
+      console.error("Error reacting to message:", error);
+      toast("Reaction failed", {
+        description: "Could not react to the message. Please try again.",
+      });
+    }
+  };
+
   const filteredUsers = users.filter((user) =>
     user.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // Toggle sidebar for mobile
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => !prev);
+  };
+
   return (
-    <Card className="flex h-screen bg-background lg:max-w-[1700px] sm:max-w-[320px] border-[-14px]"
+    <Card className="h-screen bg-black lg:max-w-[1700px] sm:max-w-[320px] overflow-hidden"
       onDragOver={handleDragOver}
       onDrop={handleDrop}>
 
-      {/* Sidebar */}
-      <ChatSidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        currentUser={currentUser}
-        users={filteredUsers}
-        chats={chats}
-        selectedChat={selectedChat}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onSignOut={handleSignOut}
-        onChatSelect={(chat) => {
-          setSelectedChat(chat)
-          setSidebarOpen(false)
+      <ResizablePanelGroup
+        direction="horizontal"
+        className="h-full bg-black rounded-lg border-0"
+        onLayout={(sizes) => {
+          if (!isMobile) {
+            setSidebarSize(sizes[0]);
+            setChatSize(sizes[1]);
+          }
         }}
-        onStartChat={startNewChat}
-      />
-
-      {/* Chat Area */}
-      <CardContent className={`${sidebarOpen ? "hidden" : "flex"} md:flex flex-1 flex-col h-full p-0`}>
-        {selectedChat && selectedChatUser ? (
-          <>
-            <ChatHeader
-              user={selectedChatUser}
-              onOpenSidebar={() => setSidebarOpen(true)}
-              showMenuButton={true}
-              onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)}
+      >
+        {/* Sidebar Panel */}
+        <ResizablePanel
+          defaultSize={sidebarSize}
+          minSize={isMobile ? 0 : 20}
+          maxSize={isMobile ? 100 : 40}
+          collapsible={!isMobile}
+          collapsedSize={0}
+          onCollapse={() => {
+            setSidebarOpen(false);
+          }}
+          onExpand={() => {
+            setSidebarOpen(true);
+          }}
+          className={`${isMobile && !sidebarOpen ? 'hidden' : ''}`}
+        >
+          <div className="h-full ">
+            <ChatSidebar
+              isOpen={true} // Always true as the ResizablePanel handles visibility
+              onClose={() => setSidebarOpen(false)}
+              currentUser={currentUser}
+              users={filteredUsers}
+              chats={chats}
+              selectedChat={selectedChat}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              onSignOut={handleSignOut}
+              onChatSelect={(chat) => {
+                setSelectedChat(chat);
+                if (isMobile) setSidebarOpen(false);
+              }}
+              onStartChat={startNewChat}
             />
+          </div>
+        </ResizablePanel>
 
-            {/* Messages Area */}
-            <div className="flex-1 scrolbar-thin overflow-y-auto p-4">
-              <MessageList
-                messages={messages}
-                currentUser={currentUser}
-                formatTime={(timestamp) => new Date(timestamp).toLocaleTimeString()}
+        {/* Resizable Handle */}
+        {(!isMobile || sidebarOpen) && <ResizableHandle />}
+
+        {/* Chat Area Panel */}
+        <ResizablePanel
+          defaultSize={chatSize}
+          minSize={30}
+          className={`${isMobile && sidebarOpen ? 'hidden' : ''}`}
+        >
+          <div className="flex flex-col h-full">
+            {selectedChat && selectedChatUser ? (
+              <>
+                <ChatHeader
+                  user={selectedChatUser}
+                  onOpenSidebar={toggleSidebar}
+                  showMenuButton={true}
+                  onCall={(callType: 'audio' | 'video') => startCall(selectedChatUser.uid, callType)}
+                />
+
+                {/* Messages Area */}
+                <div className="flex-1 scrollbar-thin overflow-y-auto p-4">
+                  <MessageList
+                    messages={messages}
+                    currentUser={currentUser}
+                    formatTime={(timestamp) => new Date(timestamp).toLocaleTimeString()}
+                    onEditMessage={handleEditMessage}
+                    onDeleteMessage={handleDeleteMessage}
+                    onReactToMessage={handleReactToMessage}
+                  />
+                  <div ref={messagesEndRef} />
+                </div>
+
+                <MessageInput
+                  message={newMessage}
+                  isUploading={isUploading}
+                  onMessageChange={setNewMessage}
+                  onSendMessage={handleSendMessage}
+                  onFileSelect={handleFileSelect}
+                  onVoiceMessageSend={handleVoiceMessageSend}
+                />
+              </>
+            ) : (
+              <WelcomeScreen
+                onOpenSidebar={toggleSidebar}
               />
-              <div ref={messagesEndRef} />
-            </div>
-
-            <MessageInput
-              message={newMessage}
-              isUploading={isUploading}
-              onMessageChange={setNewMessage}
-              onSendMessage={handleSendMessage}
-              onFileSelect={handleFileSelect}
-              onVoiceMessageSend={handleVoiceMessageSend}
-            />
-          </>
-        ) : (
-          <WelcomeScreen
-            onOpenSidebar={() => setSidebarOpen(true)}
-          />
-        )}
-      </CardContent>
+            )}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* Call UI Components */}
       <CallContext.Consumer>
@@ -363,14 +492,26 @@ function ChatContent() {
           const { callState, endCall } = callContext
 
           if (callState.isIncomingCall && !callState.callAccepted) {
-            // Incoming call UI
+            const caller = users.find(user => user.uid === callState.callerId);
+            return (
+              <IncomingCallDialog
+                callerName={caller?.displayName || 'Unknown Caller'}
+              />
+            );
           }
 
           if (callState.isOutgoingCall || callState.callAccepted) {
-            // Ongoing call UI
+            const otherUser = users.find(
+              user => user.uid === (callState.calleeId || callState.callerId)
+            );
+            return (
+              <CallInterface
+                recipientName={otherUser?.displayName || 'Unknown User'}
+              />
+            );
           }
 
-          return null
+          return null;
         }}
       </CallContext.Consumer>
     </Card>
@@ -401,8 +542,8 @@ export default function ChatInterface() {
 
   if (!currentUser) {
     return (
-      <Card className="flex items-center justify-center min-h-screen bg-muted/30 animate-fadeIn border-0">
-        <CardContent className="text-center relative w-full">
+      <Card className="flex items-center justify-center min-h-screen bg-black animate-fadeIn border-0">
+        <CardContent className="text-center bg-black relative w-full">
           <div className="absolute inset-0 bg-background blur-lg opacity-50"></div>
           <CardTitle className="text-4xl font-semibold text-foreground mb-4 animate-pulse">
             Be patient, your conversations are loading...
@@ -423,914 +564,6 @@ export default function ChatInterface() {
   )
 }
 
-// File: components\chat\components_chat_ChatHeader.tsx
-import { useState, useEffect } from "react"
-import { User } from "../types/types_chat"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import { Globe, MailsIcon, Menu, MoreVertical, Phone, Video } from "lucide-react"
-import { useCall } from "../contexts/contexts_CallContext"
-import { toast } from "sonner"
-import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-
-// Utility function to format the last seen date
-const formatLastSeen = (lastSeen: any): string => {
-  if (!lastSeen) return "Unknown";
-
-  let date;
-  if (lastSeen.seconds) {
-    date = new Date(lastSeen.seconds * 1000); // Firestore Timestamp
-  } else if (typeof lastSeen === "string") {
-    date = new Date(lastSeen); // String input
-  } else {
-    return "Unknown";
-  }
-
-  if (isNaN(date.getTime())) return "Unknown"; // Invalid date fallback
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-
-  if (
-    date.getFullYear() === today.getFullYear() &&
-    date.getMonth() === today.getMonth() &&
-    date.getDate() === today.getDate()
-  ) {
-    return `Today at ${date.toLocaleTimeString(undefined, {
-      hour: '2-digit',
-      minute: '2-digit',
-    })}`;
-  }
-
-  if (
-    date.getFullYear() === yesterday.getFullYear() &&
-    date.getMonth() === yesterday.getMonth() &&
-    date.getDate() === yesterday.getDate()
-  ) {
-    return `Yesterday at ${date.toLocaleTimeString(undefined, {
-      hour: '2-digit',
-      minute: '2-digit',
-    })}`;
-  }
-
-  return `Last seen on ${date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })} at ${date.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`;
-};
-
-interface ChatHeaderProps {
-  user: User
-  onOpenSidebar: () => void
-  showMenuButton?: boolean
-}
-
-export const ChatHeader = ({ user, onOpenSidebar, showMenuButton = false }: ChatHeaderProps) => {
-  const { startCall } = useCall()
-
-  // State to track user data and loading status
-  const [userData, setUserData] = useState(user);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Simulate a delay for skeleton loading (1.5 seconds)
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Mock live data update for demonstration
-  useEffect(() => {
-    // Example of subscribing to a real-time change (like Firestore listener)
-    const interval = setInterval(() => {
-      // Simulate a data change
-      setUserData((prevUserData) => ({
-        ...prevUserData,
-        lastSeen: new Date().toISOString(), // Update with new "lastSeen" time
-      }));
-    }, 5000); // Change every 5 seconds
-
-    return () => clearInterval(interval); // Cleanup on unmount
-  }, []);
-
-  return (
-    <div className="p-3 bg-[#000000] border-b border-gray-800 flex items-center justify-between">
-      <div className="flex items-center space-x-3">
-        {showMenuButton && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="md:hidden"
-            onClick={onOpenSidebar}
-          >
-            <Menu className="h-4 w-4 text-gray-400" />
-          </Button>
-        )}
-
-        <HoverCard>
-          <HoverCardTrigger>
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={userData.photoURL || undefined} />
-              <AvatarFallback className="bg-green-500 text-white text-sm">
-                {userData.displayName.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          </HoverCardTrigger>
-          <HoverCardContent className="w-80 p-4 dark:bg-black dark:text-white bg-white text-black rounded-lg shadow-lg">
-            {loading ? (
-              <div className="flex space-x-4">
-                <Skeleton className="h-14 w-14 rounded-full" />
-                <div className="space-y-2 w-full">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                </div>
-              </div>
-            ) : (
-              <div className="flex space-x-4">
-                <Avatar className="h-14 w-14">
-                  <AvatarImage src={userData.photoURL || undefined} />
-                  <AvatarFallback>{userData.displayName.charAt(0).toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <div className="space-y-1">
-                  <h4 className="text-sm font-semibold">{userData.displayName}</h4>
-                  <div className="flex items-center pt-2">
-                    <MailsIcon className="mr-2 h-4 w-4 opacity-70" />
-                    <span className="text-sm text-gray-500">{userData.email}</span>
-                  </div>
-                  <div className="flex items-center pt-2">
-                    <Globe className="mr-2 h-4 w-4 opacity-70" />
-                    <span className="text-xs text-gray-400">{formatLastSeen(userData.lastSeen)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </HoverCardContent>
-        </HoverCard>
-
-        <div className="flex-1 min-w-0">
-          <h2 className="font-medium text-sm text-white truncate">
-            {userData.displayName}
-          </h2>
-          <p className="text-xs text-gray-400">
-            {userData.status === "online" ? "online" : `${formatLastSeen(userData.lastSeen)}`}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-2">
-        <TooltipProvider >
-          <Tooltip >
-            <TooltipTrigger > <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => startCall(userData.uid, 'audio')}
-          className="text-gray-400 hover:text-white hover:bg-gray-700"
-        >
-          <Phone className="h-4 w-4" />
-        </Button>
-        </TooltipTrigger>
-            <TooltipContent ><p className="dark:bg-black text-white">Start audio call</p></TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-
-        <TooltipProvider >
-          <Tooltip >
-            <TooltipTrigger>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => startCall(userData.uid, 'video')}
-          className="text-gray-400 hover:text-white hover:bg-gray-700"
-        >
-          <Video className="h-4 w-4" />
-        </Button>
-            </TooltipTrigger>
-            <TooltipContent ><p className="dark:bg-black text-white">Start video call</p></TooltipContent>
-            </Tooltip >
-              </TooltipProvider >
-
-
-
-        <TooltipProvider >
-          <Tooltip >
-            <TooltipTrigger>
-        <Button variant="ghost" size="sm" onClick={() => toast("Coming soon!")} className="text-gray-400 hover:text-white hover:bg-gray-700" >
-          <MoreVertical className="h-4 w-4 text-gray-400" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent ><p className="dark:bg-black text-white">More</p></TooltipContent>
-    </Tooltip >
-              </TooltipProvider >
-      </div>
-    </div>
-  )
-}
-
-
-// File: components\chat\components_chat_ChatSidebar.tsx
-import { Message, User } from "../types/types_chat"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Search, LogOut, X } from "lucide-react"
-import { formatMessageTime, formatTime, getInitials } from "../utils/lib_utils (1)"
-
-// Add Chat interface since it's used but not imported
-interface Chat {
-  id: string
-  participants: string[]
-  lastMessage: {
-    text: string
-    timestamp: string
-  } | null
-  unreadCount: number
-}
-
-// Add UsersList component
-interface UsersListProps {
-  users: User[]
-  onStartChat: (userId: string) => void
-}
-
-
-
-
-const UsersList = ({ users, onStartChat }: UsersListProps) => {
-
-  
-  return (
-    <div className="py-2">
-      <h3 className="px-3 py-1 text-xs font-medium text-gray-400">USERS</h3>
-      {users.length > 0 ? (
-        users.map((user) => (
-          <div
-            key={user.uid}
-            className="px-3 py-2 flex items-center space-x-3 hover:bg-[#2a2a2a] cursor-pointer"
-            onClick={() => onStartChat(user.uid)}
-          >
-            <Avatar className="h-10 w-10">
-              <AvatarImage src={user.photoURL || undefined} />
-              <AvatarFallback className="bg-green-500 text-white">
-                {getInitials(user.displayName)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <h4 className="font-medium text-sm text-white truncate">
-                {user.displayName}
-              </h4>
-              <p className="text-xs text-gray-400 truncate">{user.status}</p>
-            </div>
-          </div>
-        ))
-      ) : (
-        <p className="px-3 py-2 text-sm text-gray-400">No users found</p>
-      )}
-    </div>
-  )
-}
-
-// Add ChatsList component
-interface ChatsListProps {
-  chats: Chat[]
-  users: User[]
-  currentUser: User | null
-  selectedChat: Chat | null
-  onChatSelect: (chat: Chat) => void
-}
-
-
-
-
-const ChatsList = ({ chats, users, currentUser, selectedChat, onChatSelect }: ChatsListProps) => {
-  return (
-    <div className="space-y-1">
-      {chats.map((chat) => {
-        const otherUserId = chat.participants.find(
-          (id) => id !== currentUser?.uid
-        )
-        const chatUser = users.find((user) => user.uid === otherUserId)
-       
-
-        return (
-          <div
-            key={chat.id}
-            className={`px-3 py-2 flex items-center space-x-3 cursor-pointer
-              ${selectedChat?.id === chat.id ? "bg-[#2a2a2a]" : "hover:bg-[#2a2a2a]"}`}
-            onClick={() => onChatSelect(chat)}
-          >
-            <Avatar className="h-10 w-10 flex-shrink-0">
-              <AvatarImage src={chatUser?.photoURL || undefined} />
-              <AvatarFallback className="bg-green-500 text-white">
-                {chatUser ? getInitials(chatUser.displayName) : "?"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-center">
-                <h4 className="font-medium text-sm text-white truncate">
-                  {chatUser?.displayName || "Unknown User"}
-                </h4>
-                {chat.lastMessage && (
-                  <span className="text-[10px] text-gray-400">
-                    {formatMessageTime(chat.lastMessage.timestamp)}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-400 truncate">
-                {chat.lastMessage ? chat.lastMessage.text : "No messages yet"}
-              </p>
-            </div>
-          </div>
-        )
-      })}
-
-      {chats.length === 0 && (
-        <div className="px-3 py-6 text-center">
-          <p className="text-sm text-gray-400">No conversations yet</p>
-          <p className="text-xs text-gray-500 mt-1">
-            Search for users to start chatting
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface ChatSidebarProps {
-  isOpen: boolean
-  onClose: () => void
-  currentUser: User | null
-  users: User[]
-  chats: Chat[]
-  selectedChat: Chat | null
-  searchQuery: string
-  onSearchChange: (query: string) => void
-  onSignOut: () => void
-  onChatSelect: (chat: Chat) => void
-  onStartChat: (userId: string) => void
-}
-
-export const ChatSidebar = ({
-  isOpen,
-  onClose,
-  currentUser,
-  users,
-  chats,
-  selectedChat,
-  searchQuery,
-  onSearchChange,
-  onSignOut,
-  onChatSelect,
-  onStartChat,
-}: ChatSidebarProps) => {
-  return (
-    <div
-      className={`${isOpen ? "fixed inset-0 z-40 block w-full" : "hidden"
-        } md:relative md:block md:w-[320px] lg:w-[400px] h-full bg-[#1e1d1d] border-r border-gray-800`}
-    >
-      {/* Header */}
-      <div className="p-3 bg-[#1e1d1d] border-b border-gray-800 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={currentUser?.photoURL || undefined} />
-            <AvatarFallback className="bg-green-500 text-white text-sm">
-              {currentUser?.displayName ? getInitials(currentUser.displayName) : "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h2 className="text-sm font-semibold text-white truncate max-w-[150px]">
-              {currentUser?.displayName}
-            </h2>
-          </div>
-        </div>
-        <div className="flex items-center space-x-1">
-          <Button variant="ghost" size="sm" onClick={onSignOut} title="Sign out">
-            <LogOut className="h-4 w-4 text-gray-400" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="md:hidden"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4 text-gray-400" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Search */}
-      <div className="p-2 border-b border-gray-800">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search or start new chat"
-            className="pl-8 h-9 text-sm bg-[#2a2a2a] border-gray-700 text-white focus:ring-1 focus:ring-gray-600"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Users/Chats List */}
-      <div className="flex-1 overflow-y-auto">
-        {searchQuery ? (
-          <UsersList users={users} onStartChat={onStartChat} />
-        ) : (
-          <ChatsList
-            chats={chats}
-            users={users}
-            currentUser={currentUser}
-            selectedChat={selectedChat}
-            onChatSelect={onChatSelect}
-          />
-        )}
-      </div>
-    </div>
-  )
-}
-
-// File: components\chat\components_chat_FilePreview.tsx
-"use client"
-
-import { useState, useEffect, useRef } from "react"
-import { Message } from "../types/types_chat"
-import { FileText, Film, FileMusic, ImageIcon } from "lucide-react"
-import dynamic from 'next/dynamic'
-import { AudioPlayer } from "./AudioPlayer"
-
-// Import Shadcn components
-import { Card, CardContent, CardDescription, CardFooter } from "@/components/ui/card"
-import { AspectRatio } from "@/components/ui/aspect-ratio"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-
-const ReactPlayer = dynamic(() => import('react-player/lazy'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-[180px] bg-muted/30 animate-pulse rounded-md flex items-center justify-center">
-      <Film className="h-8 w-8 text-muted-foreground/50" />
-    </div>
-  )
-})
-
-interface FilePreviewProps {
-  message: Message
-}
-
-export const FilePreview = ({ message }: FilePreviewProps) => {
-  const { fileUrl, fileType, fileName, text } = message
-  const [audioDuration, setAudioDuration] = useState<number | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  // Load audio duration if this is an audio file and duration isn't already provided
-  useEffect(() => {
-    if (fileType?.startsWith('audio/') && !message.duration && fileUrl) {
-      // Create a temporary audio element to get the duration
-      const audio = new Audio(fileUrl)
-      audioRef.current = audio
-
-      // The loadedmetadata event fires when duration is available
-      const handleLoadedMetadata = () => {
-        setAudioDuration(audio.duration)
-      }
-
-      audio.addEventListener('loadedmetadata', handleLoadedMetadata)
-
-      // Clean up
-      return () => {
-        audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
-        audio.src = '' // Clear source
-      }
-    }
-  }, [fileUrl, fileType, message.duration])
-
-  if (!fileUrl || !fileType) {
-    return null
-  }
-
-  if (fileType.startsWith('image/')) {
-    return (
-      <Card className="my-2 overflow-hidden">
-        <CardContent className="p-0">
-          <AspectRatio ratio={4 / 3}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={fileUrl}
-              alt={fileName || text}
-              className="object-cover w-full h-full rounded-t-md"
-            />
-          </AspectRatio>
-        </CardContent>
-        <CardFooter className="p-2 flex items-center justify-between bg-muted/20">
-          <CardDescription className="text-xs flex items-center">
-            <ImageIcon size={12} className="mr-1" /> {fileName || "Image"}
-          </CardDescription>
-          <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
-            <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-              Open
-            </a>
-          </Button>
-        </CardFooter>
-      </Card>
-    )
-  }
-
-  if (fileType.startsWith('video/')) {
-    return (
-      <Card className="my-2 overflow-hidden">
-        <CardContent className="p-0">
-          <AspectRatio ratio={16 / 9}>
-            <ReactPlayer
-              url={fileUrl}
-              controls={true}
-              width="100%"
-              height="100%"
-              className="react-player"
-            />
-          </AspectRatio>
-        </CardContent>
-        <CardFooter className="p-2 flex items-center justify-between bg-muted/20">
-          <CardDescription className="text-xs flex items-center">
-            <Film size={12} className="mr-1" /> {fileName || "Video"}
-          </CardDescription>
-          <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
-            <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-              Download
-            </a>
-          </Button>
-        </CardFooter>
-      </Card>
-    )
-  }
-
-  if (fileType.startsWith('audio/')) {
-    // Show loading state while getting audio duration
-    if (!message.duration && !audioDuration) {
-      return (
-        <Card className="my-2">
-          <CardContent className="p-4">
-            <div className="rounded-lg bg-muted/20 p-2">
-              <div className="flex items-center justify-center py-4">
-                <Skeleton className="h-8 w-48" />
-              </div>
-            </div>
-            <CardFooter className="px-0 pt-2 pb-0 flex items-center justify-between">
-              <CardDescription className="text-xs flex items-center">
-                <FileMusic size={12} className="mr-1" /> {fileName || "Audio"}
-              </CardDescription>
-              <Skeleton className="h-6 w-16" />
-            </CardFooter>
-          </CardContent>
-        </Card>
-      )
-    }
-
-    return (
-      <Card className="my-2">
-        <CardContent className="p-4 ">
-          <div className="rounded-lg bg-muted/20 p-2">
-            {/* Use our custom AudioPlayer with the duration we got */}
-            <AudioPlayer
-              src={fileUrl}
-              initialDuration={message.duration || audioDuration || 0}
-              className="w-full"
-            />
-          </div>
-          <CardFooter className="px-0 pt-2 pb-0 flex items-center justify-between">
-            <CardDescription className="text-xs flex items-center">
-              <FileMusic size={12} className="mr-1" /> {fileName || "Audio"}
-            </CardDescription>
-            <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
-              <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-                Download
-              </a>
-            </Button>
-          </CardFooter>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  // For document or other file types
-  return (
-    <Card className="my-2">
-      <CardContent className="p-4">
-        <Button variant="outline" className="w-full justify-start" asChild>
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center p-3 rounded-lg"
-          >
-            <FileText className="mr-2 h-6 w-6 text-primary" />
-            <div className="overflow-hidden flex-1">
-              <p className="font-medium text-sm truncate">{fileName || text}</p>
-              <p className="text-xs text-muted-foreground">Click to open</p>
-            </div>
-          </a>
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-// File: components\chat\components_chat_MessageInput.tsx
-"use client"
-
-import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Smile, Paperclip, Send, Mic, StopCircle, Trash2 } from "lucide-react"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip"
-import { Card, CardContent } from "@/components/ui/card"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from "@/components/ui/popover"
-import { Progress } from "@/components/ui/progress"
-import { AudioPlayer } from "./AudioPlayer"
-import { toast } from "sonner" // Import toast from your UI library
-
-// You could use a proper emoji picker library here
-// For simplicity, I'm adding a basic placeholder
-const EmojiPicker = ({ onEmojiSelect }: { onEmojiSelect: (emoji: string) => void }) => {
-  const commonEmojis = ["😊", "😂", "❤️", "👍", "🙌", "🎉", "🔥", "👏", "🤔", "😍"]
-
-  return (
-    <div className="grid grid-cols-5 gap-2 p-2">
-      {commonEmojis.map((emoji) => (
-        <Button
-          key={emoji}
-          variant="ghost"
-          className="h-8 w-8 p-0"
-          onClick={() => onEmojiSelect(emoji)}
-        >
-          {emoji}
-        </Button>
-      ))}
-    </div>
-  )
-}
-
-interface MessageInputProps {
-  message: string
-  isUploading: boolean
-  onMessageChange: (message: string) => void
-  onSendMessage: () => void
-  onFileSelect: () => void
-  onVoiceMessageSend: (audioBlob: Blob) => void
-}
-
-export const MessageInput = ({
-  message,
-  isUploading,
-  onMessageChange,
-  onSendMessage,
-  onFileSelect,
-  onVoiceMessageSend
-}: MessageInputProps) => {
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [isRecording, setIsRecording] = useState(false)
-  const [audioURL, setAudioURL] = useState<string | null>(null)
-  const [audioDuration, setAudioDuration] = useState<number>(0)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const mediaStreamRef = useRef<MediaStream | null>(null)
-  const recordingStartTimeRef = useRef<number | null>(null)
-
-  // Simulate upload progress
-  if (isUploading && uploadProgress < 100) {
-    setTimeout(() => {
-      setUploadProgress((prev) => Math.min(prev + 10, 100))
-    }, 300)
-  } else if (!isUploading && uploadProgress !== 0) {
-    setUploadProgress(0)
-  }
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      mediaStreamRef.current = stream
-      const mediaRecorder = new MediaRecorder(stream)
-      mediaRecorderRef.current = mediaRecorder
-      audioChunksRef.current = []
-
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data)
-      }
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
-        const audioURL = URL.createObjectURL(audioBlob)
-        setAudioURL(audioURL)
-      }
-
-      mediaRecorder.start()
-      setIsRecording(true)
-      recordingStartTimeRef.current = Date.now()
-    } catch (error) {
-      console.error("Error accessing microphone:", error)
-    }
-  }
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop()
-    }
-
-    // Stop all audio tracks to release the microphone
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => {
-        track.stop()
-      })
-      mediaStreamRef.current = null
-    }
-
-    // Calculate recording duration
-    if (recordingStartTimeRef.current) {
-      const endTime = Date.now()
-      const duration = (endTime - recordingStartTimeRef.current) / 1000 // duration in seconds
-      setAudioDuration(duration)
-      toast(`Audio duration: ${duration} seconds`)
-      recordingStartTimeRef.current = null
-    }
-
-    setIsRecording(false)
-  }
-
-  const sendVoiceMessage = () => {
-    if (audioURL && audioChunksRef.current.length > 0) {
-      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
-      onVoiceMessageSend(audioBlob, audioDuration)
-
-      // Clear audio state after sending
-      setAudioURL(null)
-      audioChunksRef.current = []
-      setAudioDuration(0)
-    }
-  }
-
-  const discardRecording = () => {
-    setAudioURL(null)
-    audioChunksRef.current = []
-    setAudioDuration(0)
-
-    // Also ensure any active stream is stopped when discarding
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => {
-        track.stop()
-      })
-      mediaStreamRef.current = null
-    }
-  }
-
-  return (
-    <Card className="rounded-none border-x-0 border-b-0 shadow-none">
-      <CardContent className="p-3">
-        {/* Audio Preview */}
-        {audioURL && (
-          <div className="mb-3 p-2 bg-muted/30 rounded-md">
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-medium text-muted-foreground mb-1">
-                Voice Message Preview
-              </div>
-              <div className="flex space-x-1">
-                <Button variant="ghost" size="sm" onClick={sendVoiceMessage} className="h-7 px-2">
-                  <Send className="h-3.5 w-3.5 text-primary mr-1" />
-                  <span className="text-xs">Send</span>
-                </Button>
-                <Button variant="ghost" size="sm" onClick={discardRecording} className="h-7 px-2">
-                  <Trash2 className="h-3.5 w-3.5 text-destructive mr-1" />
-                  <span className="text-xs">Discard</span>
-                </Button>
-              </div>
-            </div>
-            <AudioPlayer src={audioURL} initialDuration={audioDuration} />
-          </div>
-        )}
-
-        <div className="flex items-center space-x-2">
-          <TooltipProvider>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-muted-foreground">
-                      <Smile className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p className="dark: bg-black dark:text-white">Add emoji</p></TooltipContent>
-                </Tooltip>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-0">
-                <EmojiPicker onEmojiSelect={(emoji) => onMessageChange(message + emoji)} />
-              </PopoverContent>
-            </Popover>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onFileSelect}
-                  disabled={isUploading}
-                  className={`text-muted-foreground ${isUploading ? "opacity-50" : ""}`}
-                >
-                  <Paperclip
-                    className={`h-5 w-5 ${isUploading ? "text-primary animate-pulse" : ""}`}
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent><p className="dark: bg-black dark:text-white">Attach file</p></TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <div className="flex-1">
-            <Textarea
-              placeholder={isUploading ? "Uploading file..." : "Type a message"}
-              className="w-full resize-none min-h-[40px] max-h-[120px] text-sm bg-muted/50"
-              value={message}
-              onChange={(e) => onMessageChange(e.target.value)}
-              disabled={isUploading}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault()
-                  onSendMessage()
-                }
-              }}
-              rows={1}
-            />
-          </div>
-
-          <TooltipProvider>
-            {message.trim() ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onSendMessage}
-                    disabled={isUploading}
-                    className="text-primary hover:text-primary hover:bg-primary/10"
-                  >
-                    <Send className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent><p className="dark: bg-black dark:text-white">Send message</p></TooltipContent>
-              </Tooltip>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={isRecording ? stopRecording : startRecording}
-                    className={`text-muted-foreground ${isRecording ? "text-red-500 animate-pulse" : ""}`}
-                  >
-                    {isRecording ? <StopCircle className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                  </Button>
-                </TooltipTrigger>
-                  <TooltipContent><p className="dark: bg-black dark:text-white">{isRecording ? "Stop recording" : "Record voice message"}</p></TooltipContent>
-              </Tooltip>
-            )}
-          </TooltipProvider>
-        </div>
-
-        {isUploading && (
-          <div className="mt-2">
-            <Progress value={uploadProgress} className="h-1" />
-            <p className="text-xs text-primary mt-1 text-center">
-              Uploading file... {uploadProgress}%
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
 
 // File: components\chat\components_chat_MessageList.tsx
 import { Message, User } from "../types/types_chat"
@@ -1346,7 +579,7 @@ interface MessageListProps {
 export const MessageList = ({ messages, currentUser, formatTime }: MessageListProps) => {
   if (messages.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex scrollbar items-center justify-center">
         <div className="text-center text-gray-400">
           <p className="text-sm">No messages yet</p>
           <p className="text-xs mt-1">Send a message to start the conversation</p>
@@ -1400,192 +633,319 @@ export const MessageList = ({ messages, currentUser, formatTime }: MessageListPr
   )
 }
 
-// File: components\chat\components_chat_WelcomeScreen.tsx
-import { Button } from "@/components/ui/button"
-import { Menu, MessageSquare } from "lucide-react"
+// File: components\services\lib_services_chat.ts
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp,
+  getDocs,
+  deleteDoc,
+  arrayUnion,
+  arrayRemove,
+  limit,
+  getDoc
+} from "firebase/firestore"
+import { db, storage } from "../firebase-config"
+import { Chat, Message, Reaction, User } from "../types/types_chat"
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 
-interface WelcomeScreenProps {
-  onOpenSidebar: () => void
-}
-
-export const WelcomeScreen = ({ onOpenSidebar }: WelcomeScreenProps) => {
-  return (
-    <div className="h-full flex flex-col items-center justify-center p-4">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="md:hidden absolute top-3 left-3"
-        onClick={onOpenSidebar}
-      >
-        <Menu className="h-4 w-4 mr-2 text-gray-400" />
-        <span className="text-sm text-gray-400">Chats</span>
-      </Button>
-      <div className="text-center max-w-md">
-        <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-          <MessageSquare className="h-8 w-8 text-white" />
-        </div>
-        <h2 className="text-xl font-bold text-white mb-2">Memchat</h2>
-        <p className="text-sm text-gray-400">
-          Select a chat from the sidebar or search for a user to start a new
-          conversation.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// File: components\chat\AudioPlayer.tsx
-"use client"
-
-import { useState, useEffect, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Slider } from "@/components/ui/slider"
-import { Play, Pause, Volume2, VolumeX } from "lucide-react"
-import { cn } from "@/lib/utils"
-
-interface AudioPlayerProps {
-    src: string
-    className?: string
-    initialDuration?: number
-}
-
-export function AudioPlayer({ src, className, initialDuration }: AudioPlayerProps) {
-    const [isPlaying, setIsPlaying] = useState(false)
-    const [currentTime, setCurrentTime] = useState(0)
-    const [duration, setDuration] = useState(initialDuration || 0)
-    const [volume, setVolume] = useState(1)
-    const [isMuted, setIsMuted] = useState(false)
-    const audioRef = useRef<HTMLAudioElement | null>(null)
-
-    useEffect(() => {
-        const audio = audioRef.current
-        if (!audio) return
-
-        const setAudioData = () => {
-            // Only update duration from metadata if we don't have initialDuration
-            if (!initialDuration) {
-                setDuration(audio.duration)
-            }
-        }
-
-        const setAudioTime = () => {
-            setCurrentTime(audio.currentTime)
-        }
-
-        const handleEnded = () => {
-            setIsPlaying(false)
-            audio.currentTime = 0
-            setCurrentTime(0)
-        }
-
-        // Events
-        audio.addEventListener('loadeddata', setAudioData)
-        audio.addEventListener('timeupdate', setAudioTime)
-        audio.addEventListener('ended', handleEnded)
-
-        return () => {
-            audio.removeEventListener('loadeddata', setAudioData)
-            audio.removeEventListener('timeupdate', setAudioTime)
-            audio.removeEventListener('ended', handleEnded)
-        }
-    }, [initialDuration])
-
-    // Update duration when initialDuration changes
-    useEffect(() => {
-        if (initialDuration) {
-            setDuration(initialDuration)
-        }
-    }, [initialDuration])
-
-    // Play/Pause
-    const togglePlay = () => {
-        const audio = audioRef.current
-        if (!audio) return
-
-        if (isPlaying) {
-            audio.pause()
-            setIsPlaying(false)
-        } else {
-            audio.play()
-            setIsPlaying(true)
-        }
-    }
-
-    // Update current time
-    const handleTimeChange = (values: number[]) => {
-        const audio = audioRef.current
-        if (!audio) return
-
-        audio.currentTime = values[0]
-        setCurrentTime(values[0])
-    }
-
-    // Toggle mute
-    const toggleMute = () => {
-        const audio = audioRef.current
-        if (!audio) return
-
-        if (isMuted) {
-            audio.volume = volume
-            setIsMuted(false)
-        } else {
-            audio.volume = 0
-            setIsMuted(true)
-        }
-    }
-
-    // Format time (mm:ss)
-    const formatTime = (time: number) => {
-        if (isNaN(time)) return "00:00"
-
-        const minutes = Math.floor(time / 60)
-        const seconds = Math.floor(time % 60)
-        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-    }
-
-    return (
-        <div className={cn("flex flex-col space-y-2", className)}>
-            <audio ref={audioRef} src={src} preload="metadata" />
-
-            <div className="flex items-center space-x-2">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 rounded-full p-0"
-                    onClick={togglePlay}
-                >
-                    {isPlaying ? (
-                        <Pause className="h-4 w-4" />
-                    ) : (
-                        <Play className="h-4 w-4" />
-                    )}
-                </Button>
-
-                <Slider
-                    value={[currentTime]}
-                    max={duration || 100}
-                    step={0.1}
-                    onValueChange={handleTimeChange}
-                    className="w-full"
-                />
-
-                <div className="text-xs text-muted-foreground w-16 text-right">
-                    {formatTime(currentTime)}/{formatTime(duration)}
-                </div>
-
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 rounded-full p-0"
-                    onClick={toggleMute}
-                >
-                    {isMuted ? (
-                        <VolumeX className="h-4 w-4" />
-                    ) : (
-                        <Volume2 className="h-4 w-4" />
-                    )}
-                </Button>
-            </div>
-        </div>
+export const chatService = {
+  listenToChats: (userId: string, callback: (chats: Chat[]) => void) => {
+    const q = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", userId),
+      orderBy("lastMessageAt", "desc")
     )
+
+    return onSnapshot(q, (snapshot) => {
+      const chats: Chat[] = []
+      snapshot.forEach((doc) => {
+        chats.push({ id: doc.id, ...doc.data() } as Chat)
+      })
+      callback(chats)
+    })
+  },
+
+  listenToMessages: (
+    chatId: string,
+    callback: (messages: Message[]) => void,
+    onMessageRead?: (messageId: string) => void
+  ) => {
+    const q = query(
+      collection(db, "chats", chatId, "messages"),
+      orderBy("timestamp", "asc")
+    )
+
+    return onSnapshot(q, (snapshot) => {
+      const messages: Message[] = []
+      snapshot.forEach((doc) => {
+        const messageData = doc.data() as Message;
+        messages.push({ id: doc.id, ...messageData })
+
+        // Mark message as read if it's from the other user and not already read
+        if (onMessageRead && messageData.read === false) {
+          onMessageRead(doc.id);
+        }
+      })
+      callback(messages)
+    })
+  },
+
+  sendMessage: async (chatId: string, messageData: Omit<Message, "id">) => {
+    await addDoc(collection(db, "chats", chatId, "messages"), messageData)
+
+    await updateDoc(doc(db, "chats", chatId), {
+      lastMessage: {
+        text: messageData.text,
+        timestamp: messageData.timestamp,
+      },
+      lastMessageAt: serverTimestamp(),
+    })
+  },
+
+  uploadFile: async (file: File, chatId: string) => {
+    const storageRef = ref(storage, `chat_files/${chatId}/${Date.now()}_${file.name}`)
+    const uploadTask = await uploadBytes(storageRef, file)
+    return getDownloadURL(uploadTask.ref)
+  },
+
+  createOrGetChat: async (currentUserId: string, otherUserId: string) => {
+    const existingChatQuery = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", currentUserId)
+    )
+
+    const existingChatsSnapshot = await getDocs(existingChatQuery)
+    let existingChat: Chat | null = null
+
+    existingChatsSnapshot.forEach((doc) => {
+      const chatData = doc.data() as Chat
+      if (chatData.participants.includes(otherUserId)) {
+        existingChat = { id: doc.id, ...chatData }
+      }
+    })
+
+    if (existingChat) {
+      return existingChat
+    }
+
+    const newChatRef = await addDoc(collection(db, "chats"), {
+      participants: [currentUserId, otherUserId],
+      lastMessage: null,
+      lastMessageAt: serverTimestamp(),
+      unreadCount: 0,
+    })
+
+    return {
+      id: newChatRef.id,
+      participants: [currentUserId, otherUserId],
+      lastMessage: null,
+      unreadCount: 0,
+    } as Chat
+  },
+
+  // Updated message action functions
+  editMessage: async (
+    chatId: string,
+    messageId: string,
+    newText: string
+  ) => {
+    try {
+      // Get the current message
+      const messageRef = doc(db, "chats", chatId, "messages", messageId);
+      const messageDoc = await getDoc(messageRef);
+
+      if (!messageDoc.exists()) {
+        throw new Error("Message not found");
+      }
+
+      // Update the message
+      await updateDoc(messageRef, {
+        text: newText,
+        isEdited: true
+      });
+
+      // Check if this is the last message in the chat
+      const chatRef = doc(db, "chats", chatId);
+      const chatDoc = await getDoc(chatRef);
+
+      if (chatDoc.exists()) {
+        const chatData = chatDoc.data() as Chat;
+
+        // Compare message timestamps to determine if it's the last message
+        if (chatData.lastMessage &&
+          chatData.lastMessage.timestamp === messageDoc.data().timestamp) {
+          await updateDoc(chatRef, {
+            "lastMessage.text": `${newText}`,
+          });
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error editing message:", error);
+      throw error;
+    }
+  },
+
+  deleteMessage: async (
+    chatId: string,
+    messageId: string,
+    isLastMessage: boolean
+  ) => {
+    try {
+      // Delete the message
+      await deleteDoc(doc(db, "chats", chatId, "messages", messageId));
+
+      // If this was the last message, update the chat's last message
+      if (isLastMessage) {
+        const messagesRef = collection(db, "chats", chatId, "messages");
+        const q = query(messagesRef, orderBy("timestamp", "desc"), limit(1));
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+          const newLastMessage = snapshot.docs[0].data() as Message;
+          await updateDoc(doc(db, "chats", chatId), {
+            lastMessage: {
+              text: newLastMessage.text,
+              timestamp: newLastMessage.timestamp,
+            },
+          });
+        } else {
+          // No messages left in the chat
+          await updateDoc(doc(db, "chats", chatId), {
+            lastMessage: null,
+          });
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      throw error;
+    }
+  },
+
+  addReaction: async (
+    chatId: string,
+    messageId: string,
+    reaction: Reaction
+  ) => {
+    try {
+      // First, check if the user already reacted with this emoji
+      const messageRef = doc(db, "chats", chatId, "messages", messageId);
+      const messageDoc = await getDoc(messageRef);
+
+      if (!messageDoc.exists()) {
+        throw new Error("Message not found");
+      }
+
+      const message = messageDoc.data() as Message;
+      const reactions = message.reactions || [];
+
+      // Check if this user already reacted with this emoji
+      const existingReaction = reactions.find(
+        r => r.userId === reaction.userId && r.emoji === reaction.emoji
+      );
+
+      if (existingReaction) {
+        // User already reacted with this emoji, so we'll remove it
+        await updateDoc(messageRef, {
+          reactions: arrayRemove(existingReaction)
+        });
+      } else {
+        // User hasn't reacted with this emoji yet, so add it
+        await updateDoc(messageRef, {
+          reactions: arrayUnion(reaction)
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error adding reaction:", error);
+      throw error;
+    }
+  },
+
+  removeReaction: async (
+    chatId: string,
+    messageId: string,
+    reaction: Reaction
+  ) => {
+    try {
+      const messageRef = doc(db, "chats", chatId, "messages", messageId);
+
+      // Check if the message exists
+      const messageDoc = await getDoc(messageRef);
+
+      if (!messageDoc.exists()) {
+        throw new Error("Message not found");
+      }
+
+      // Use arrayRemove to remove the reaction
+      await updateDoc(messageRef, {
+        reactions: arrayRemove(reaction)
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Error removing reaction:", error);
+      throw error;
+    }
+  },
+
+  // Simplified reaction toggle function
+  toggleReaction: async (
+    chatId: string,
+    messageId: string,
+    userId: string,
+    emoji: string
+  ) => {
+    try {
+      const messageRef = doc(db, "chats", chatId, "messages", messageId);
+      const messageDoc = await getDoc(messageRef);
+
+      if (!messageDoc.exists()) {
+        throw new Error("Message not found");
+      }
+
+      const message = messageDoc.data() as Message;
+      const reactions = message.reactions || [];
+
+      // Look for an existing reaction from this user with this emoji
+      const existingReactionIndex = reactions.findIndex(
+        r => r.userId === userId && r.emoji === emoji
+      );
+
+      if (existingReactionIndex !== -1) {
+        // User already reacted with this emoji, so remove it
+        const existingReaction = reactions[existingReactionIndex];
+        await updateDoc(messageRef, {
+          reactions: arrayRemove(existingReaction)
+        });
+      } else {
+        // Add the new reaction
+        const newReaction: Reaction = {
+          userId,
+          emoji,
+          timestamp: new Date().toISOString()
+        };
+
+        await updateDoc(messageRef, {
+          reactions: arrayUnion(newReaction)
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error toggling reaction:", error);
+      throw error;
+    }
+  }
 }

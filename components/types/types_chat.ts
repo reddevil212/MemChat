@@ -1,5 +1,9 @@
 
-
+export interface Reaction {
+  userId: string;
+  emoji: string;
+  timestamp: string;
+}
 
 export interface User {
   uid: string
@@ -27,9 +31,15 @@ export interface Message {
   timestamp: string
   read: boolean
   fileUrl?: string
+  replyToId?: string
   fileType?: string
   fileName?: string
   duration?: number;
+  isEdited?: boolean;
+  reactions?: Reaction[];
+  replyToText?: string
+  replyToFileUrl?: string
+  replyToFileName?: string
 }
 // ... existing types ...
 

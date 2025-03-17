@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from "react"
 import { onAuthStateChanged, signOut } from "firebase/auth"
-import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, onSnapshot } from "firebase/firestore"
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, onSnapshot, limit } from "firebase/firestore"
 import { auth, db } from "@/lib/lib_firebase"
-import { User, Chat, Message } from "./types/types_chat"
+import { User, Chat, Message, Reaction } from "./types/types_chat"
 import { CallContext } from "./contexts/contexts_CallContext"
 import { chatService } from "./services/lib_services_chat"
 import { useToast } from "@/hooks/use-toast"
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/resizable"
 import { IncomingCallDialog } from './call/components_call_IncomingCallDialog'
 import { CallInterface } from './call/components_call_CallInterface'
+import { AnimatePresence } from "framer-motion"
 
 function ChatContent() {
   const isMobile = useMobile()
@@ -40,6 +41,10 @@ function ChatContent() {
   const [newMessage, setNewMessage] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [isUploading, setIsUploading] = useState(false)
+
+  // State for WhatsApp-like features
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
 
   // Track panel sizes
   const [sidebarSize, setSidebarSize] = useState(isMobile ? 0 : 25)
@@ -184,6 +189,13 @@ function ChatContent() {
     }
   }, [sidebarOpen, isMobile])
 
+  // Clear editing/replying state when chat changes
+  useEffect(() => {
+    setEditingMessage(null)
+    setReplyingTo(null)
+    setNewMessage("")
+  }, [selectedChat])
+
   const handleSignOut = async () => {
     try {
       if (currentUser) {
@@ -218,23 +230,77 @@ function ChatContent() {
     }
   }
 
+  // WhatsApp-like features handler methods
+  const handleStartEditMessage = (messageId: string, text: string) => {
+    const message = messages.find(m => m.id === messageId)
+    if (message) {
+      setEditingMessage(message)
+      setNewMessage(text)
+      setReplyingTo(null) // Clear any reply when editing
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null)
+    setNewMessage("")
+  }
+
+  const handleReplyToMessage = (message: Message) => {
+    setReplyingTo(message)
+    setEditingMessage(null) // Clear any editing when replying
+    // Focus on the input after a short delay to allow UI to update
+    setTimeout(() => {
+      const inputElement = document.querySelector('textarea')
+      if (inputElement) {
+        inputElement.focus()
+      }
+    }, 100)
+  }
+
+  const handleCancelReply = () => {
+    setReplyingTo(null)
+  }
+
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || !currentUser) return
+    if (!newMessage.trim() || !selectedChat || !currentUser) return;
 
     try {
-      await chatService.sendMessage(selectedChat.id, {
-        senderId: currentUser.uid,
-        text: newMessage,
-        timestamp: new Date().toISOString(),
-        read: false,
-      })
-      setNewMessage("")
+      if (editingMessage && editingMessage.id) {
+        // Handle edited message
+        await handleEditMessage(editingMessage.id, newMessage);
+        setEditingMessage(null);
+      } else if (replyingTo && replyingTo.id) {
+        // Handle reply message
+        await chatService.sendReplyMessage(
+          selectedChat.id,
+          {
+            senderId: currentUser.uid,
+            text: newMessage,
+            timestamp: new Date().toISOString(),
+            read: false,
+            replyToId: replyingTo.id,
+            replyToText: replyingTo.text || "Media message",
+            replyToFileUrl: replyingTo.fileUrl || undefined, // Change null to undefined
+          },
+          replyingTo
+        );
+        setReplyingTo(null);
+      } else {
+        // Send regular message
+        await chatService.sendMessage(selectedChat.id, {
+          senderId: currentUser.uid,
+          text: newMessage,
+          timestamp: new Date().toISOString(),
+          read: false,
+        });
+      }
+      setNewMessage("");
     } catch (error) {
       toast("Error sending message", {
         description: "Please try again",
-      })
+      });
     }
-  }
+  };
 
   const handleFileUpload = async (file: File) => {
     if (!file || !selectedChat || !currentUser) return
@@ -243,7 +309,7 @@ function ChatContent() {
       setIsUploading(true)
       const downloadURL = await chatService.uploadFile(file, selectedChat.id)
 
-      await chatService.sendMessage(selectedChat.id, {
+      const messageData: Partial<Message> = {
         senderId: currentUser.uid,
         text: `Sent ${file.type.split('/')[0]}`,
         fileUrl: downloadURL,
@@ -251,7 +317,22 @@ function ChatContent() {
         fileName: file.name,
         timestamp: new Date().toISOString(),
         read: false,
-      })
+      }
+
+      // If replying, include reply data
+      if (replyingTo && replyingTo.id) {
+        messageData.replyToId = replyingTo.id
+        messageData.replyToText = replyingTo.text || "Media message"
+
+        await chatService.sendReplyMessage(
+          selectedChat.id,
+          messageData as Message,
+          replyingTo
+        )
+        setReplyingTo(null)
+      } else {
+        await chatService.sendMessage(selectedChat.id, messageData as Message)
+      }
 
       toast("File uploaded", {
         description: "File has been sent successfully.",
@@ -287,7 +368,7 @@ function ChatContent() {
       setIsUploading(true)
       const downloadURL = await chatService.uploadFile(audioBlob, selectedChat.id)
 
-      await chatService.sendMessage(selectedChat.id, {
+      const messageData: Partial<Message> = {
         senderId: currentUser.uid,
         text: "Sent a voice message",
         fileUrl: downloadURL,
@@ -296,7 +377,22 @@ function ChatContent() {
         fileName: "voice_message.wav",
         timestamp: new Date().toISOString(),
         read: false,
-      })
+      }
+
+      // If replying, include reply data
+      if (replyingTo && replyingTo.id) {
+        messageData.replyToId = replyingTo.id
+        messageData.replyToText = replyingTo.text || "Media message"
+
+        await chatService.sendReplyMessage(
+          selectedChat.id,
+          messageData as Message,
+          replyingTo
+        )
+        setReplyingTo(null)
+      } else {
+        await chatService.sendMessage(selectedChat.id, messageData as Message)
+      }
 
       toast("Voice message sent", {
         description: "Voice message has been sent successfully.",
@@ -310,6 +406,70 @@ function ChatContent() {
       setIsUploading(false)
     }
   }
+
+  // Message action handlers
+  const handleEditMessage = async (messageId: string, newText: string) => {
+    if (!selectedChat || !currentUser) return;
+
+    try {
+      const message = messages.find(m => m.id === messageId);
+
+      // Only allow editing own messages
+      if (message && message.senderId === currentUser.uid) {
+        await chatService.editMessage(selectedChat.id, messageId, newText);
+
+        toast("Message edited", {
+          description: "Your message has been updated",
+        });
+      }
+    } catch (error) {
+      console.error("Error editing message:", error);
+      toast("Edit failed", {
+        description: "Could not edit the message. Please try again.",
+      });
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string, isLastMessage: boolean) => {
+    if (!selectedChat || !currentUser) return;
+
+    try {
+      const message = messages.find(m => m.id === messageId);
+
+      // Only allow deleting own messages
+      if (message && message.senderId === currentUser.uid) {
+        await chatService.deleteMessage(selectedChat.id, messageId, isLastMessage);
+
+        toast("Message deleted", {
+          description: "Your message has been removed",
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      toast("Delete failed", {
+        description: "Could not delete the message. Please try again.",
+      });
+    }
+  };
+
+  const handleReactToMessage = async (messageId: string, emoji: string) => {
+    if (!selectedChat || !currentUser) return;
+
+    try {
+      // Use the simplified toggle reaction function
+      await chatService.toggleReaction(
+        selectedChat.id,
+        messageId,
+        currentUser.uid,
+        emoji
+      );
+    } catch (error) {
+      console.error("Error reacting to message:", error);
+      toast("Reaction failed", {
+        description: "Could not react to the message. Please try again.",
+      });
+    }
+  };
 
   const filteredUsers = users.filter((user) =>
     user.displayName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -371,7 +531,7 @@ function ChatContent() {
         </ResizablePanel>
 
         {/* Resizable Handle */}
-        {(!isMobile || sidebarOpen) && <ResizableHandle  />}
+        {(!isMobile || sidebarOpen) && <ResizableHandle />}
 
         {/* Chat Area Panel */}
         <ResizablePanel
@@ -390,22 +550,32 @@ function ChatContent() {
                 />
 
                 {/* Messages Area */}
-                <div className="flex-1  scrolbar-thin overflow-y-auto p-4">
-                  <MessageList
-                    messages={messages}
-                    currentUser={currentUser}
-                    formatTime={(timestamp) => new Date(timestamp).toLocaleTimeString()}
-                  />
+                <div className="flex-1 scrollbar-thin overflow-y-auto p-4">
+                  <AnimatePresence initial={false}>
+                    <MessageList
+                      messages={messages}
+                      currentUser={currentUser}
+                      formatTime={(timestamp) => new Date(timestamp).toLocaleTimeString()}
+                      onEditMessage={handleStartEditMessage}
+                      onDeleteMessage={handleDeleteMessage}
+                      onReactToMessage={handleReactToMessage}
+                      onReplyToMessage={handleReplyToMessage}
+                    />
+                  </AnimatePresence>
                   <div ref={messagesEndRef} />
                 </div>
 
                 <MessageInput
                   message={newMessage}
                   isUploading={isUploading}
+                  replyingTo={replyingTo}
+                  editingMessage={editingMessage}
                   onMessageChange={setNewMessage}
                   onSendMessage={handleSendMessage}
                   onFileSelect={handleFileSelect}
                   onVoiceMessageSend={handleVoiceMessageSend}
+                  onCancelReply={handleCancelReply}
+                  onCancelEdit={handleCancelEdit}
                 />
               </>
             ) : (
@@ -474,7 +644,7 @@ export default function ChatInterface() {
 
   if (!currentUser) {
     return (
-      <Card className="flex items-center justify-center min-h-screen bg-muted/30 animate-fadeIn border-0">
+      <Card className="flex items-center justify-center min-h-screen bg-black animate-fadeIn border-0">
         <CardContent className="text-center bg-black relative w-full">
           <div className="absolute inset-0 bg-background blur-lg opacity-50"></div>
           <CardTitle className="text-4xl font-semibold text-foreground mb-4 animate-pulse">

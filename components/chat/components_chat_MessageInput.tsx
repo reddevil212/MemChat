@@ -2,40 +2,29 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Smile, Paperclip, Send, Mic, StopCircle, Trash2 } from "lucide-react"
+import { Smile, Paperclip, Send, Mic, StopCircle, Trash2, X } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Card, CardContent } from "@/components/ui/card"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
 import { AudioPlayer } from "./AudioPlayer"
-import { toast } from "sonner" // Import toast from your UI library
+import { toast } from "sonner"
+import { Message } from "../types/types_chat"
+import { motion, AnimatePresence } from "framer-motion"
 
-// You could use a proper emoji picker library here
-// For simplicity, I'm adding a basic placeholder
 const EmojiPicker = ({ onEmojiSelect }: { onEmojiSelect: (emoji: string) => void }) => {
   const commonEmojis = ["😊", "😂", "❤️", "👍", "🙌", "🎉", "🔥", "👏", "🤔", "😍"]
-
   return (
     <div className="grid grid-cols-5 gap-2 p-2">
       {commonEmojis.map((emoji) => (
-        <Button
+        <button
           key={emoji}
-          variant="ghost"
           className="h-8 w-8 p-0"
           onClick={() => onEmojiSelect(emoji)}
         >
           {emoji}
-        </Button>
+        </button>
       ))}
     </div>
   )
@@ -44,19 +33,27 @@ const EmojiPicker = ({ onEmojiSelect }: { onEmojiSelect: (emoji: string) => void
 interface MessageInputProps {
   message: string
   isUploading: boolean
+  replyingTo?: Message | null
+  editingMessage?: Message | null
   onMessageChange: (message: string) => void
   onSendMessage: () => void
   onFileSelect: () => void
-  onVoiceMessageSend: (audioBlob: Blob) => void
+  onVoiceMessageSend: (audioBlob: Blob, duration?: number) => void
+  onCancelReply?: () => void
+  onCancelEdit?: () => void
 }
 
 export const MessageInput = ({
   message,
   isUploading,
+  replyingTo = null,
+  editingMessage = null,
   onMessageChange,
   onSendMessage,
   onFileSelect,
-  onVoiceMessageSend
+  onVoiceMessageSend,
+  onCancelReply = () => { },
+  onCancelEdit = () => { }
 }: MessageInputProps) => {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isRecording, setIsRecording] = useState(false)
@@ -66,14 +63,28 @@ export const MessageInput = ({
   const audioChunksRef = useRef<Blob[]>([])
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const recordingStartTimeRef = useRef<number | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Simulate upload progress
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus()
+      adjustTextareaHeight()
+    }
+  }, [message, replyingTo, editingMessage])
+
   if (isUploading && uploadProgress < 100) {
     setTimeout(() => {
       setUploadProgress((prev) => Math.min(prev + 10, 100))
     }, 300)
   } else if (!isUploading && uploadProgress !== 0) {
     setUploadProgress(0)
+  }
+
+  const adjustTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`
+    }
   }
 
   const startRecording = async () => {
@@ -99,6 +110,7 @@ export const MessageInput = ({
       recordingStartTimeRef.current = Date.now()
     } catch (error) {
       console.error("Error accessing microphone:", error)
+      toast.error("Could not access microphone")
     }
   }
 
@@ -107,23 +119,18 @@ export const MessageInput = ({
       mediaRecorderRef.current.stop()
     }
 
-    // Stop all audio tracks to release the microphone
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => {
         track.stop()
       })
       mediaStreamRef.current = null
     }
-
-    // Calculate recording duration
     if (recordingStartTimeRef.current) {
       const endTime = Date.now()
-      const duration = (endTime - recordingStartTimeRef.current) / 1000 // duration in seconds
+      const duration = (endTime - recordingStartTimeRef.current) / 1000
       setAudioDuration(duration)
-      toast(`Audio duration: ${duration} seconds`)
       recordingStartTimeRef.current = null
     }
-
     setIsRecording(false)
   }
 
@@ -131,8 +138,6 @@ export const MessageInput = ({
     if (audioURL && audioChunksRef.current.length > 0) {
       const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
       onVoiceMessageSend(audioBlob, audioDuration)
-
-      // Clear audio state after sending
       setAudioURL(null)
       audioChunksRef.current = []
       setAudioDuration(0)
@@ -143,8 +148,6 @@ export const MessageInput = ({
     setAudioURL(null)
     audioChunksRef.current = []
     setAudioDuration(0)
-
-    // Also ensure any active stream is stopped when discarding
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => {
         track.stop()
@@ -153,10 +156,55 @@ export const MessageInput = ({
     }
   }
 
+  const getPlaceholderText = () => {
+    if (isUploading) return "Uploading file..."
+    if (editingMessage) return "Edit your message"
+    if (replyingTo) return "Type your reply"
+    return "Type a message"
+  }
+
   return (
     <Card className="rounded-none border-x-0 border-b-0 shadow-none">
       <CardContent className="p-3">
-        {/* Audio Preview */}
+        <AnimatePresence>
+          {(replyingTo || editingMessage) && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="mb-3 p-2 bg-muted/30 rounded-md"
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-muted-foreground mb-1">
+                  {editingMessage
+                    ? "Editing message"
+                    : `Replying to ${replyingTo?.senderId === "reddevil212" ? "yourself" : ""}`
+                  }
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={editingMessage ? onCancelEdit : onCancelReply}
+                  className="h-6 w-6 p-0"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="text-sm text-foreground/80 truncate max-w-[90%]">
+                {replyingTo?.fileUrl ? (
+                  <div className="flex items-center space-x-2">
+                    <img src={replyingTo.fileUrl} alt="Replied media" className="w-10 h-10 object-cover rounded" />
+                    <span>{replyingTo.fileName || "Media file"}</span>
+                  </div>
+                ) : (
+                  replyingTo?.text || "Media message"
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {audioURL && (
           <div className="mb-3 p-2 bg-muted/30 rounded-md">
             <div className="flex items-center justify-between">
@@ -204,24 +252,32 @@ export const MessageInput = ({
                   variant="ghost"
                   size="sm"
                   onClick={onFileSelect}
-                  disabled={isUploading}
-                  className={`text-muted-foreground ${isUploading ? "opacity-50" : ""}`}
+                  disabled={isUploading || !!editingMessage}
+                  className={`text-muted-foreground ${isUploading || !!editingMessage ? "opacity-50" : ""}`}
                 >
                   <Paperclip
                     className={`h-5 w-5 ${isUploading ? "text-primary animate-pulse" : ""}`}
                   />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent><p className="dark: bg-black dark:text-white">Attach file</p></TooltipContent>
+              <TooltipContent>
+                <p className="dark: bg-black dark:text-white">
+                  {editingMessage ? "Can't attach files when editing" : "Attach file"}
+                </p>
+              </TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
           <div className="flex-1">
             <Textarea
-              placeholder={isUploading ? "Uploading file..." : "Type a message"}
+              ref={textareaRef}
+              placeholder={getPlaceholderText()}
               className="w-full resize-none min-h-[40px] max-h-[120px] text-sm bg-muted/50"
               value={message}
-              onChange={(e) => onMessageChange(e.target.value)}
+              onChange={(e) => {
+                onMessageChange(e.target.value)
+                adjustTextareaHeight()
+              }}
               disabled={isUploading}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -234,7 +290,7 @@ export const MessageInput = ({
           </div>
 
           <TooltipProvider>
-            {message.trim() ? (
+            {message.trim() || editingMessage ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -247,7 +303,11 @@ export const MessageInput = ({
                     <Send className="h-5 w-5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent><p className="dark: bg-black dark:text-white">Send message</p></TooltipContent>
+                <TooltipContent>
+                  <p className="dark: bg-black dark:text-white">
+                    {editingMessage ? "Save edit" : "Send message"}
+                  </p>
+                </TooltipContent>
               </Tooltip>
             ) : (
               <Tooltip>
@@ -256,12 +316,19 @@ export const MessageInput = ({
                     variant="ghost"
                     size="sm"
                     onClick={isRecording ? stopRecording : startRecording}
-                    className={`text-muted-foreground ${isRecording ? "text-red-500 animate-pulse" : ""}`}
+                    disabled={!!editingMessage}
+                    className={`text-muted-foreground ${isRecording ? "text-red-500 animate-pulse" : ""} ${editingMessage ? "opacity-50" : ""}`}
                   >
                     {isRecording ? <StopCircle className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                   </Button>
                 </TooltipTrigger>
-                  <TooltipContent><p className="dark: bg-black dark:text-white">{isRecording ? "Stop recording" : "Record voice message"}</p></TooltipContent>
+                <TooltipContent>
+                  <p className="dark: bg-black dark:text-white">
+                    {editingMessage
+                      ? "Can't record when editing"
+                      : (isRecording ? "Stop recording" : "Record voice message")}
+                  </p>
+                </TooltipContent>
               </Tooltip>
             )}
           </TooltipProvider>
@@ -278,4 +345,4 @@ export const MessageInput = ({
       </CardContent>
     </Card>
   )
-}
+};
