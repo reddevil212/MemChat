@@ -40,6 +40,7 @@ export interface Message {
   replyToText?: string
   replyToFileUrl?: string
   replyToFileName?: string
+  isForwarded?: boolean; // Add this optional property
 }
 // ... existing types ...
 

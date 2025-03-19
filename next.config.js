@@ -8,7 +8,7 @@ const nextConfig = {
         ignoreBuildErrors: true,
     },
 
-// output: 'export',
+
     
 
   images: {
