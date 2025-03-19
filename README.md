@@ -2,7 +2,7 @@
 
 I need devs to contribute! Welcome to everyone ❤️.
 
-MemChat is a modern chat application built with [Next.js](https://nextjs.org), leveraging the power of [React](https://reactjs.org) and [Tailwind CSS](https://tailwindcss.com) for a seamless and responsive user experience.
+MemChat is a modern chat application built with [Next.js](https://nextjs.org), leveraging the power of [React](https://reactjs.org), [Typescript](https://www.typescriptlang.org/)  and [Tailwind CSS](https://tailwindcss.com) for a seamless and responsive user experience.
 
 ## Features
 
