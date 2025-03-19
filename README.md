@@ -1,6 +1,6 @@
 # MemChat
 
-i need devs to contribute! Welcome to everyone.
+I need devs to contribute! Welcome to everyone ❤️.
 
 MemChat is a modern chat application built with [Next.js](https://nextjs.org), leveraging the power of [React](https://reactjs.org) and [Tailwind CSS](https://tailwindcss.com) for a seamless and responsive user experience.
 
